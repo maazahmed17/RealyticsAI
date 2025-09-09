@@ -45,6 +45,9 @@ class RealyticsAIChatbot:
         
         # Load price prediction model
         self.price_model = None
+        self.feature_columns = None
+        self.location_encoder = None  
+        self.feature_scaler = None
         self.load_model()
         
         # Load data for context
@@ -66,17 +69,28 @@ class RealyticsAIChatbot:
     def load_model(self):
         """Load the trained ML model"""
         try:
-            # Try to load the simple model first (compatible with 2 features)
-            simple_model_path = MODEL_DIR / "simple_model.pkl"
-            if simple_model_path.exists():
-                self.price_model = joblib.load(simple_model_path)
-                console.print(f"[green]✅ ML Model loaded[/green]")
+            # Try to load the enhanced XGBoost model first
+            enhanced_models = list(MODEL_DIR.glob("enhanced_xgb_model_*.pkl"))
+            if enhanced_models:
+                self.price_model = joblib.load(max(enhanced_models, key=os.path.getctime))
+                console.print(f"[green]✅ Enhanced XGBoost Model loaded[/green]")
+                
+                # Also load feature columns and encoders
+                self.feature_columns = joblib.load(MODEL_DIR / "feature_columns.pkl")
+                self.location_encoder = joblib.load(MODEL_DIR / "location_encoder.pkl")
+                self.feature_scaler = joblib.load(MODEL_DIR / "feature_scaler.pkl")
             else:
-                # Fallback to enhanced model if exists
-                model_files = list(MODEL_DIR.glob("enhanced_model_*.pkl"))
-                if model_files:
-                    self.price_model = joblib.load(max(model_files, key=os.path.getctime))
-                    console.print(f"[green]✅ Enhanced ML Model loaded[/green]")
+                # Fallback to simple model if enhanced not available
+                simple_model_path = MODEL_DIR / "simple_model.pkl"
+                if simple_model_path.exists():
+                    self.price_model = joblib.load(simple_model_path)
+                    console.print(f"[green]✅ Simple ML Model loaded[/green]")
+                else:
+                    # Fallback to any enhanced model
+                    model_files = list(MODEL_DIR.glob("enhanced_model_*.pkl"))
+                    if model_files:
+                        self.price_model = joblib.load(max(model_files, key=os.path.getctime))
+                        console.print(f"[green]✅ Enhanced ML Model loaded[/green]")
         except Exception as e:
             console.print(f"[yellow]⚠️ Could not load model: {e}[/yellow]")
     
@@ -247,12 +261,21 @@ class RealyticsAIChatbot:
         prediction_price = None
         comparables_count = 0
         
-        if self.price_model:
+        if self.price_model and self.feature_columns and self.location_encoder and self.feature_scaler:
             try:
-                X = pd.DataFrame([[bath, balcony]], columns=['bath', 'balcony'])
-                prediction_price = self.price_model.predict(X)[0]
+                # Use enhanced XGBoost model with proper feature engineering
+                prediction_price = self._predict_with_enhanced_model(
+                    bhk, bath, balcony, sqft, location
+                )
             except Exception as e:
-                console.print(f"[yellow]Warning: Could not use ML model: {e}[/yellow]")
+                console.print(f"[yellow]Warning: Could not use enhanced model: {e}[/yellow]")
+        elif self.price_model:
+            try:
+                # Fallback to simple model (only if enhanced model not available)
+                X_simple = np.array([[bath, balcony]])
+                prediction_price = self.price_model.predict(X_simple)[0]
+            except Exception as e:
+                console.print(f"[yellow]Warning: Could not use simple model: {e}[/yellow]")
         
         # If ML model didn't work, use data-based estimate
         if prediction_price is None:
@@ -360,6 +383,40 @@ class RealyticsAIChatbot:
         ])
         
         return "\n".join(response_lines)
+    
+    def _predict_with_enhanced_model(self, bhk: int, bath: int, balcony: int, sqft: float, location: str) -> float:
+        """Make prediction using the enhanced XGBoost model with proper feature engineering"""
+        try:
+            # Transform location using the trained encoder
+            loc_enc = self.location_encoder.transform(location)
+            
+            # Prepare feature dictionary with all required features
+            feature_dict = {
+                'bath': bath,
+                'balcony': balcony,
+                'bhk': bhk,
+                'total_sqft': sqft,
+                'location_encoded': loc_enc['location_encoded'],
+                'location_tier': loc_enc['location_tier'],
+                'price_per_sqft': sqft / bhk if bhk > 0 else sqft,
+                'sqft_per_bhk': sqft / max(bhk, 1),
+                'bath_per_bhk': bath / max(bhk, 1)
+            }
+            
+            # Create DataFrame with the exact feature columns the model expects
+            X = pd.DataFrame([feature_dict])[self.feature_columns]
+            
+            # Scale features using the trained scaler
+            X_scaled = self.feature_scaler.transform(X)
+            
+            # Make prediction
+            predicted_price = float(self.price_model.predict(X_scaled)[0])
+            
+            return predicted_price
+            
+        except Exception as e:
+            console.print(f"[red]Error in enhanced prediction: {e}[/red]")
+            raise
     
     def generate_general_response(self, query: str) -> str:
         """Generate response for general queries"""

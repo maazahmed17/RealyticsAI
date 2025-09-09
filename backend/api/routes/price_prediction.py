@@ -13,13 +13,13 @@ from pathlib import Path
 import tempfile
 import os
 
-from services.price_prediction.price_predictor import PricePredictionService
+from services.price_prediction.enhanced_price_predictor import EnhancedPricePredictionService
 from core.config.settings import get_settings
 
 router = APIRouter()
 
-# Initialize price prediction service
-price_service = PricePredictionService()
+# Initialize enhanced price prediction service with XGBoost
+price_service = EnhancedPricePredictionService()
 
 
 # Pydantic models for API
