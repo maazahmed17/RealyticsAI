@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealyticsAI - Intelligent Property Assistant</title>
+    
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Left Sidebar -->
+    <aside id="leftSidebar" class="sidebar sidebar-left collapsed">
+        <div class="sidebar-header">
+            <button class="sidebar-toggle" id="leftSidebarToggle">
+                <i class="ph ph-list"></i>
+            </button>
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <i class="ph ph-house-line"></i>
+                </div>
+                <span class="logo-text">RealyticsAI</span>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <button class="nav-item new-chat" id="newChatBtn">
+                <i class="ph ph-plus-circle"></i>
+                <span class="nav-text">New Chat</span>
+            </button>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">
+                    <i class="ph ph-clock-counter-clockwise"></i>
+                    <span class="nav-text">History</span>
+                </div>
+                <div class="conversation-history" id="conversationHistory">
+                    <!-- Conversation items will be dynamically added here -->
+                </div>
+            </div>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button class="nav-item settings-btn">
+                <i class="ph ph-gear"></i>
+                <span class="nav-text">Settings</span>
+            </button>
+            <button class="nav-item user-profile">
+                <div class="user-avatar">
+                    <i class="ph ph-user"></i>
+                </div>
+                <span class="nav-text">Guest User</span>
+            </button>
+        </div>
+    </aside>
+    
+    <!-- Main Chat View -->
+    <main class="chat-container">
+        <!-- Chat Header -->
+        <header class="chat-header">
+            <div class="header-content">
+                <h1 class="chat-title">Property Intelligence Assistant</h1>
+                <div class="header-actions">
+                    <button class="icon-btn" id="rightSidebarToggle" title="Show Details">
+                        <i class="ph ph-sidebar-simple"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Chat Messages Area -->
+        <div class="chat-messages" id="chatMessages">
+            <!-- Dynamic Welcome Container -->
+            <div class="welcome-container" id="welcomeContainer">
+                <!-- Content will be dynamically inserted based on first-time vs returning user -->
+            </div>
+            
+            <!-- Chat messages will be dynamically added here -->
+        </div>
+        
+        <!-- Input Container -->
+        <div class="input-container">
+            <div class="input-wrapper">
+                <!-- Features Menu Button -->
+                <div class="features-menu-wrapper">
+                    <button class="features-btn" id="featuresBtn">
+                        <i class="ph ph-plus"></i>
+                    </button>
+                    
+                    <!-- Features Dropdown Menu -->
+                    <div class="features-menu" id="featuresMenu">
+                        <button class="feature-item" data-feature="price">
+                            <i class="ph ph-tag"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">Price Valuation</span>
+                                <span class="feature-desc">Estimate property value</span>
+                            </div>
+                        </button>
+                        <button class="feature-item disabled" data-feature="discover">
+                            <i class="ph ph-map-pin"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">Property Discovery</span>
+                                <span class="feature-desc">Coming Soon</span>
+                            </div>
+                        </button>
+                        <button class="feature-item disabled" data-feature="negotiate">
+                            <i class="ph ph-handshake"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">AI Negotiation</span>
+                                <span class="feature-desc">Coming Soon</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Input Field -->
+                <div class="input-field-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        class="message-input" 
+                        placeholder="Ask about a property, or select a feature..."
+                        rows="1"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" disabled>
+                        <i class="ph ph-paper-plane-tilt"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="input-hints">
+                <span class="hint-text">Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line</span>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Right Sidebar -->
+    <aside id="rightSidebar" class="sidebar sidebar-right hidden">
+        <div class="sidebar-header">
+            <h2 class="sidebar-title">Property Details</h2>
+            <button class="icon-btn" id="closeRightSidebar">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-content" id="rightSidebarContent">
+            <!-- Dynamic content will be loaded here based on context -->
+        </div>
+    </aside>
+    
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RealyticsAI - Feature Demo</title>
+    
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <style>
+        .demo-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-primary);
+            border-radius: 12px;
+            padding: var(--spacing-lg);
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        .demo-title {
+            color: var(--accent-primary);
+            font-weight: 600;
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .demo-button {
+            width: 100%;
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-sm);
+            transition: all var(--transition-fast);
+            cursor: pointer;
+        }
+        
+        .demo-button:hover {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+        
+        .demo-section {
+            margin-bottom: var(--spacing-lg);
+            padding-bottom: var(--spacing-md);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .demo-section:last-child {
+            border-bottom: none;
+        }
+        
+        .demo-label {
+            font-size: var(--font-size-xs);
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: var(--spacing-sm);
+        }
+    </style>
+</head>
+<body>
+    <!-- Demo Controls Panel -->
+    <div class="demo-controls">
+        <div class="demo-title">🎮 Demo Controls</div>
+        
+        <div class="demo-section">
+            <div class="demo-label">Welcome States</div>
+            <button class="demo-button" onclick="showFirstTimeWelcome()">First-Time User</button>
+            <button class="demo-button" onclick="showReturningWelcome()">Returning User</button>
+        </div>
+        
+        <div class="demo-section">
+            <div class="demo-label">Right Sidebar Views</div>
+            <button class="demo-button" onclick="showValuation()">Valuation Results</button>
+            <button class="demo-button" onclick="showDiscovery()">Property Discovery</button>
+            <button class="demo-button" onclick="showNegotiation()">AI Negotiation</button>
+        </div>
+        
+        <div class="demo-section">
+            <div class="demo-label">Messages & Actions</div>
+            <button class="demo-button" onclick="addSampleValuation()">Add Valuation Message</button>
+            <button class="demo-button" onclick="testActionButtons()">Test Action Buttons</button>
+        </div>
+        
+        <div class="demo-section">
+            <div class="demo-label">System</div>
+            <button class="demo-button" onclick="clearLocalStorage()">Reset User State</button>
+            <button class="demo-button" onclick="location.reload()">Reload Page</button>
+        </div>
+    </div>
+    
+    <!-- Main Application (same as index.html) -->
+    <aside id="leftSidebar" class="sidebar sidebar-left collapsed">
+        <div class="sidebar-header">
+            <button class="sidebar-toggle" id="leftSidebarToggle">
+                <i class="ph ph-list"></i>
+            </button>
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <i class="ph ph-house-line"></i>
+                </div>
+                <span class="logo-text">RealyticsAI</span>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <button class="nav-item new-chat" id="newChatBtn">
+                <i class="ph ph-plus-circle"></i>
+                <span class="nav-text">New Chat</span>
+            </button>
+            
+            <div class="nav-section">
+                <div class="nav-section-title">
+                    <i class="ph ph-clock-counter-clockwise"></i>
+                    <span class="nav-text">History</span>
+                </div>
+                <div class="conversation-history" id="conversationHistory"></div>
+            </div>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <button class="nav-item settings-btn">
+                <i class="ph ph-gear"></i>
+                <span class="nav-text">Settings</span>
+            </button>
+            <button class="nav-item user-profile">
+                <div class="user-avatar">
+                    <i class="ph ph-user"></i>
+                </div>
+                <span class="nav-text">Guest User</span>
+            </button>
+        </div>
+    </aside>
+    
+    <main class="chat-container">
+        <header class="chat-header">
+            <div class="header-content">
+                <h1 class="chat-title">Property Intelligence Assistant - Demo Mode</h1>
+                <div class="header-actions">
+                    <button class="icon-btn" id="rightSidebarToggle" title="Show Details">
+                        <i class="ph ph-sidebar-simple"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-container" id="welcomeContainer"></div>
+        </div>
+        
+        <div class="input-container">
+            <div class="input-wrapper">
+                <div class="features-menu-wrapper">
+                    <button class="features-btn" id="featuresBtn">
+                        <i class="ph ph-plus"></i>
+                    </button>
+                    
+                    <div class="features-menu" id="featuresMenu">
+                        <button class="feature-item" data-feature="price">
+                            <i class="ph ph-tag"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">Price Valuation</span>
+                                <span class="feature-desc">Estimate property value</span>
+                            </div>
+                        </button>
+                        <button class="feature-item disabled" data-feature="discover">
+                            <i class="ph ph-map-pin"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">Property Discovery</span>
+                                <span class="feature-desc">Coming Soon</span>
+                            </div>
+                        </button>
+                        <button class="feature-item disabled" data-feature="negotiate">
+                            <i class="ph ph-handshake"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">AI Negotiation</span>
+                                <span class="feature-desc">Coming Soon</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="input-field-wrapper">
+                    <textarea 
+                        id="messageInput" 
+                        class="message-input" 
+                        placeholder="Ask about a property, or select a feature..."
+                        rows="1"
+                    ></textarea>
+                    <button class="send-btn" id="sendBtn" disabled>
+                        <i class="ph ph-paper-plane-tilt"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="input-hints">
+                <span class="hint-text">Press <kbd>Enter</kbd> to send, <kbd>Shift + Enter</kbd> for new line</span>
+            </div>
+        </div>
+    </main>
+    
+    <aside id="rightSidebar" class="sidebar sidebar-right hidden">
+        <div class="sidebar-header">
+            <h2 class="sidebar-title">Property Details</h2>
+            <button class="icon-btn" id="closeRightSidebar">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-content" id="rightSidebarContent"></div>
+    </aside>
+    
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="app.js"></script>
+    
+    <script>
+        // Demo-specific functions
+        let app;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            app = new RealyticsAI();
+            console.log('Demo mode initialized');
+        });
+        
+        function showFirstTimeWelcome() {
+            localStorage.removeItem('returningUser');
+            app.isFirstTimeUser = true;
+            app.startNewChat();
+        }
+        
+        function showReturningWelcome() {
+            localStorage.setItem('returningUser', 'true');
+            app.isFirstTimeUser = false;
+            app.startNewChat();
+        }
+        
+        function showValuation() {
+            app.showValuationResults();
+        }
+        
+        function showDiscovery() {
+            app.showDiscoveryView();
+        }
+        
+        function showNegotiation() {
+            app.showNegotiationView();
+        }
+        
+        function addSampleValuation() {
+            const valuationMessage = `Based on my analysis of your 3 BHK property in Whitefield:
+            
+**Estimated Value: ₹1.85 Crores**
+
+This valuation takes into account:
+• Location premium in Whitefield Tech Corridor
+• Current market conditions
+• Property specifications (1500 sq.ft, 3 BHK, 2 Bath)
+• Recent comparable sales in the area
+
+The price per square foot of ₹12,333 is competitive for this location, reflecting the area's strong demand from IT professionals and excellent connectivity.`;
+            
+            // Hide welcome if visible
+            const welcome = document.getElementById('welcomeContainer');
+            if (welcome) welcome.style.display = 'none';
+            
+            // Add the message with action buttons
+            app.addStreamingMessage(valuationMessage);
+        }
+        
+        function testActionButtons() {
+            console.log('Hover over any AI message to see action buttons');
+            alert('Hover over any AI message to see the action buttons (Copy, Share, Explain, Refine)');
+        }
+        
+        function clearLocalStorage() {
+            localStorage.clear();
+            alert('User state cleared. Refresh the page to see first-time welcome.');
+        }
+    </script>
+</body>
+</html>
