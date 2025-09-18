@@ -12,7 +12,7 @@ import google.generativeai as genai
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from backend.core.config import settings
+from backend.core.config import settings as config_settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,25 +22,25 @@ class GeminiService:
     
     def __init__(self):
         """Initialize the Gemini service"""
-        if not settings.validate_api_keys():
+        if not config_settings.validate_api_keys():
             raise ValueError("Invalid or missing Gemini API key")
             
         # Configure Gemini
-        genai.configure(api_key=settings.GEMINI_API_KEY)
+        genai.configure(api_key=config_settings.GEMINI_API_KEY)
         
         # Initialize the model
         self.model = genai.GenerativeModel(
-            model_name=settings.GEMINI_MODEL,
+            model_name=config_settings.GEMINI_MODEL,
             generation_config={
-                "temperature": settings.GEMINI_TEMPERATURE,
-                "max_output_tokens": settings.GEMINI_MAX_TOKENS,
+                "temperature": config_settings.GEMINI_TEMPERATURE,
+                "max_output_tokens": config_settings.GEMINI_MAX_TOKENS,
             }
         )
         
         # Initialize chat session
         self.chat_session = None
         
-        logger.info(f"Gemini service initialized with model: {settings.GEMINI_MODEL}")
+        logger.info(f"Gemini service initialized with model: {config_settings.GEMINI_MODEL}")
     
     def generate_response(self, prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
         """

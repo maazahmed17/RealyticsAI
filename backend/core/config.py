@@ -8,14 +8,17 @@ import os
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseSettings, Field
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
 class Settings(BaseSettings):
     """System-wide configuration settings"""
     
     # API Keys
     GEMINI_API_KEY: str = Field(
-        default="AIzaSyBS5TJCebmoyy9QyE_R-OAaYYV9V2oM-A8",
+        default=None,
         env="GEMINI_API_KEY"
     )
     
@@ -52,12 +55,23 @@ class Settings(BaseSettings):
     
     # Feature Flags
     ENABLE_PRICE_PREDICTION: bool = True
-    ENABLE_PROPERTY_RECOMMENDATION: bool = False  # Will be enabled when implemented
+    ENABLE_PROPERTY_RECOMMENDATION: bool = True  # Now enabled with recommendation engine
     ENABLE_NEGOTIATION_AGENT: bool = False  # Will be enabled when implemented
+    ENABLE_INTELLIGENT_ROUTING: bool = True  # Enable smart query routing
     
     # Chatbot Configuration
     CHATBOT_CONTEXT_LENGTH: int = Field(default=10, env="CHATBOT_CONTEXT_LENGTH")
     CHATBOT_RESPONSE_FORMAT: str = Field(default="detailed", env="CHATBOT_RESPONSE_FORMAT")
+    
+    # Recommendation System Configuration
+    RECOMMENDATION_MODEL_TYPE: str = Field(default="tfidf", env="RECOMMENDATION_MODEL_TYPE")
+    RECOMMENDATION_TOP_K_DEFAULT: int = Field(default=10, env="RECOMMENDATION_TOP_K_DEFAULT")
+    RECOMMENDATION_DATA_PATH: str = Field(
+        default="backend/services/recommendation_service/data/dataproperties.csv", 
+        env="RECOMMENDATION_DATA_PATH"
+    )
+    ENABLE_BERT_RECOMMENDATIONS: bool = Field(default=False, env="ENABLE_BERT_RECOMMENDATIONS")
+    ENABLE_HYBRID_RECOMMENDATIONS: bool = Field(default=False, env="ENABLE_HYBRID_RECOMMENDATIONS")
     
     class Config:
         env_file = ".env"
@@ -88,6 +102,12 @@ class Settings(BaseSettings):
         if not self.GEMINI_API_KEY or self.GEMINI_API_KEY == "your-api-key-here":
             return False
         return True
+    
+    @classmethod
+    def validate_api_keys_static(cls) -> bool:
+        """Static method for API key validation"""
+        settings_instance = cls()
+        return settings_instance.validate_api_keys()
 
 
 # Create global settings instance

@@ -4,10 +4,15 @@ RealyticsAI Configuration Settings
 Centralized configuration for the application.
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API Keys
-GEMINI_API_KEY = "AIzaSyBS5TJCebmoyy9QyE_R-OAaYYV9V2oM-A8"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
