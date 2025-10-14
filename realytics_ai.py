@@ -166,7 +166,7 @@ class FixedUnifiedChatbot:
                 )
             
             genai.configure(api_key=GEMINI_API_KEY)
-            self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+            self.gemini_model = genai.GenerativeModel('gemini-2.0-flash-lite')
             
             # Test connection
             test_response = self.gemini_model.generate_content("Hello, test connection")

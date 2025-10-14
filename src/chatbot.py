@@ -41,7 +41,7 @@ class RealyticsAIChatbot:
         """Initialize the chatbot"""
         # Configure Gemini
         genai.configure(api_key=GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
         
         # Load price prediction model
         self.price_model = None

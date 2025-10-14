@@ -78,11 +78,11 @@ app.include_router(
 )
 
 # Future feature routes (placeholder)
-# app.include_router(
-#     property_recommendation.router,
-#     prefix="/api/v1",
-#     tags=["Property Recommendation"]
-# )
+app.include_router(
+    property_recommendation.router,
+    prefix="/api/v1",
+    tags=["Property Recommendation"]
+)
 
 # app.include_router(
 #     negotiation_agent.router,
