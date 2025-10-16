@@ -80,7 +80,7 @@ class EnhancedPricePredictionService:
         self.feature_columns = None
         self.data = None
         self.model_path = Path("/home/maaz/RealyticsAI/data/models")
-        self.data_path = Path("/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv")
+        self.data_path = Path("/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv")
         
         # Initialize service
         self._initialize_service()

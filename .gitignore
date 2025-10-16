@@ -35,11 +35,7 @@ mlflow.db
 *.joblib
 
 # Data files
-*.csv
-*.xlsx
-*.xls
-*.json
-data/raw/*
+
 data/processed/*
 data/models/*
 !data/raw/.gitkeep

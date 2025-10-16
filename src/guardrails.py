@@ -25,7 +25,7 @@ class PredictionGuardrails:
             data_path: Path to the historical property data CSV
         """
         if data_path is None:
-            data_path = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+            data_path = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
         
         self.data_path = Path(data_path)
         self.location_stats = {}

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     
     # Price Prediction Service
     price_model_name: str = "local_prices_predictor"
-    default_data_file: str = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+    default_data_file: str = "data/bengaluru_house_prices.csv"
     
     # Security
     secret_key: str = "your-secret-key-change-in-production"

@@ -30,7 +30,10 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
 import mlflow
 import mlflow.sklearn
 import joblib
@@ -51,7 +54,7 @@ console = Console()
 class Config:
     """Centralized configuration for price prediction"""
     # Data paths
-    BENGALURU_DATA_PATH = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+    BENGALURU_DATA_PATH = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
     MODEL_SAVE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "models"
     
     # MLflow settings
@@ -60,8 +63,10 @@ class Config:
     MLFLOW_MODEL_NAME = "bengaluru_price_predictor"
     
     # Model configuration
-    MODEL_FEATURES = ["bath", "balcony"]
-    EXTENDED_FEATURES = ["bath", "balcony", "total_sqft", "bhk"]
+    MODEL_FEATURES = ["location", "bhk", "total_sqft", "property_age", "floor_number", 
+                      "total_floors", "parking", "furnishing_status", "amenities"]
+    EXTENDED_FEATURES = ["location", "bhk", "total_sqft", "property_age", "floor_number", 
+                         "total_floors", "parking", "furnishing_status", "amenities"]
     TEST_SIZE = 0.2
     RANDOM_STATE = 42
     
@@ -104,10 +109,29 @@ class PricePredictionSystem:
             
             self.data = pd.read_csv(Config.BENGALURU_DATA_PATH)
             
+            # Drop PropertyID if it exists
+            if 'PropertyID' in self.data.columns:
+                self.data = self.data.drop(columns=['PropertyID'])
+            
+            # Standardize column names
+            self.data.columns = self.data.columns.str.lower()
+            
+            # Map column names
+            column_mapping = {
+                'pricelakhs': 'price',
+                'totalsqft': 'total_sqft',
+                'propertyageyears': 'property_age',
+                'floornumber': 'floor_number',
+                'totalfloors': 'total_floors',
+                'furnishingstatus': 'furnishing_status'
+            }
+            self.data = self.data.rename(columns=column_mapping)
+            
             # Basic data info
             console.print(f"[green]✅ Successfully loaded {len(self.data):,} properties[/green]")
             console.print(f"[cyan]📊 Dataset shape: {self.data.shape}[/cyan]")
-            console.print(f"[cyan]🏘️ Unique locations: {self.data['location'].nunique()}[/cyan]")
+            if 'location' in self.data.columns:
+                console.print(f"[cyan]🏘️ Unique locations: {self.data['location'].nunique()}[/cyan]")
             
             return True
             
@@ -128,19 +152,20 @@ class PricePredictionSystem:
             if col != 'price':
                 df[col] = df[col].fillna(df[col].median())
         
-        # Prepare features and target
-        if Config.USE_ADVANCED_MODEL and all(col in df.columns for col in Config.EXTENDED_FEATURES):
-            self.feature_columns = Config.EXTENDED_FEATURES
-        else:
-            self.feature_columns = Config.MODEL_FEATURES
+        # Fill categorical columns with mode
+        categorical_cols = df.select_dtypes(include=['object']).columns
+        for col in categorical_cols:
+            df[col] = df[col].fillna(df[col].mode()[0] if len(df[col].mode()) > 0 else 'Unknown')
+        
+        # Use all available features from the config
+        available_features = [col for col in Config.EXTENDED_FEATURES if col in df.columns]
+        self.feature_columns = available_features
         
         X = df[self.feature_columns].copy()
         y = df['price']
         
-        # Fill any remaining NaN values
-        X = X.fillna(X.mean())
-        
         console.print(f"[green]✅ Preprocessed {len(X)} samples with {len(self.feature_columns)} features[/green]")
+        console.print(f"[cyan]📋 Features: {self.feature_columns}[/cyan]")
         
         return X, y
     
@@ -157,31 +182,66 @@ class PricePredictionSystem:
                 X, y, test_size=Config.TEST_SIZE, random_state=Config.RANDOM_STATE
             )
             
+            # Identify categorical and numerical columns
+            categorical_cols = X_train.select_dtypes(include=["object", "category"]).columns.tolist()
+            numerical_cols = X_train.select_dtypes(exclude=["object", "category"]).columns.tolist()
+            
+            console.print(f"[cyan]📊 Categorical features: {categorical_cols}[/cyan]")
+            console.print(f"[cyan]📊 Numerical features: {numerical_cols}[/cyan]")
+            
             # Start MLflow run
             with mlflow.start_run(run_name=f"bengaluru_{model_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
                 
                 # Log parameters
                 mlflow.log_param("model_type", model_type)
                 mlflow.log_param("features", self.feature_columns)
+                mlflow.log_param("categorical_features", categorical_cols)
+                mlflow.log_param("numerical_features", numerical_cols)
                 mlflow.log_param("train_size", len(X_train))
                 mlflow.log_param("test_size", len(X_test))
                 mlflow.log_param("total_properties", len(self.data))
                 
-                # Select and train model
+                # Define preprocessing for categorical and numerical features
+                numerical_transformer = Pipeline(steps=[
+                    ("imputer", SimpleImputer(strategy="median")),
+                    ("scaler", StandardScaler())
+                ])
+                
+                categorical_transformer = Pipeline(steps=[
+                    ("imputer", SimpleImputer(strategy="most_frequent")),
+                    ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
+                ])
+                
+                # Bundle preprocessing for numerical and categorical data
+                preprocessor = ColumnTransformer(
+                    transformers=[
+                        ("num", numerical_transformer, numerical_cols),
+                        ("cat", categorical_transformer, categorical_cols),
+                    ]
+                )
+                
+                # Select base model
                 if model_type == "random_forest":
-                    self.model = RandomForestRegressor(
+                    base_model = RandomForestRegressor(
                         n_estimators=100,
                         max_depth=20,
-                        random_state=Config.RANDOM_STATE
+                        random_state=Config.RANDOM_STATE,
+                        n_jobs=-1
                     )
                 elif model_type == "gradient_boost":
-                    self.model = GradientBoostingRegressor(
+                    base_model = GradientBoostingRegressor(
                         n_estimators=100,
                         learning_rate=0.1,
                         random_state=Config.RANDOM_STATE
                     )
                 else:
-                    self.model = LinearRegression()
+                    base_model = LinearRegression()
+                
+                # Create full pipeline
+                self.model = Pipeline(steps=[
+                    ("preprocessor", preprocessor),
+                    ("model", base_model)
+                ])
                 
                 # Train with progress tracking
                 with console.status("[bold green]Training model...") as status:

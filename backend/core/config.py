@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     BASE_DIR: Path = Path(__file__).parent.parent.parent
     DATA_DIR: Path = BASE_DIR / "data"
     MODELS_DIR: Path = DATA_DIR / "models"
-    BENGALURU_DATA_PATH: str = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+    BENGALURU_DATA_PATH: str = "data/bengaluru_house_prices.csv"
     
     # Model Paths (will be updated dynamically)
     PRICE_MODEL_PATH: Optional[Path] = None

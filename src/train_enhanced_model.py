@@ -52,7 +52,7 @@ class EnhancedPricePredictionTrainer:
     
     def __init__(self, data_path: str = None):
         """Initialize the trainer"""
-        self.data_path = data_path or "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+        self.data_path = data_path or "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
         self.data = None
         self.X_train = None
         self.X_test = None

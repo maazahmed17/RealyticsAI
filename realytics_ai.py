@@ -185,7 +185,7 @@ class FixedUnifiedChatbot:
             
             # Initialize property recommender with data
             console.print("[dim]Loading recommendation service...[/dim]")
-            data_path = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+            data_path = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
             self.property_recommender = ImprovedPropertyRecommender(data_path)
             
             logger.info("All services initialized successfully")

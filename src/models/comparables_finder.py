@@ -26,7 +26,7 @@ class ComparablesFinder:
     def load_data(self):
         """Load property data from CSV file."""
         # Use the correct data path
-        data_path = Path("/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv")
+        data_path = Path("/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv")
         if data_path.exists():
             self.data = pd.read_csv(data_path)
             self._prepare_data()

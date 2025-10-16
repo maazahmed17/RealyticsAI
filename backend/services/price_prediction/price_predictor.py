@@ -29,7 +29,7 @@ class PricePredictionService:
     def __init__(self):
         self.models = {}
         self.data_cache = {}
-        self.default_data_path = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+        self.default_data_path = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
         self.model_storage_path = "../../data/models"
         
         # Initialize with default data

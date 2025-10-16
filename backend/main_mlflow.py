@@ -47,7 +47,7 @@ mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 mlflow.set_experiment("realyticsai_bengaluru_experiment")
 
 # Load Bengaluru dataset
-BENGALURU_DATA_PATH = "/mnt/c/Users/Ahmed/Downloads/bengaluru_house_prices.csv"
+BENGALURU_DATA_PATH = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
 bengaluru_data = None
 current_model = None
 model_metrics = {}

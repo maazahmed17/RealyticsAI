@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 # Import the unified chatbot
-from unified_chatbot import UnifiedRealyticsChatbot
+from realytics_ai import FixedUnifiedChatbot
 
 app = Flask(__name__, static_folder='frontend')
 CORS(app)  # Enable CORS for all routes
@@ -36,7 +36,7 @@ def initialize_system():
     logger.info("Initializing RealyticsAI Unified System...")
     
     try:
-        unified_chatbot = UnifiedRealyticsChatbot()
+        unified_chatbot = FixedUnifiedChatbot()
         logger.info("✅ Unified system initialized successfully!")
         return True
     except Exception as e:
