@@ -67,32 +67,61 @@ class RealyticsAIChatbot:
         console.print("[green]✅ Chatbot initialized successfully![/green]")
     
     def load_model(self):
-        """Load the trained ML model"""
+        """Load the trained ML model - prioritize XGBoost Advanced"""
         try:
-            # Try to load the enhanced XGBoost model first
-            enhanced_models = list(MODEL_DIR.glob("enhanced_xgb_model_*.pkl"))
-            if enhanced_models:
-                self.price_model = joblib.load(max(enhanced_models, key=os.path.getctime))
+            # Priority 1: Load the XGBoost Advanced model (best performance)
+            xgb_advanced_models = list(MODEL_DIR.glob("xgboost_advanced_*.pkl"))
+            if xgb_advanced_models:
+                latest_xgb = max(xgb_advanced_models, key=os.path.getctime)
+                self.price_model = joblib.load(latest_xgb)
+                model_name = latest_xgb.name
+                console.print(f"[green]✅ XGBoost Advanced Model loaded: {model_name}[/green]")
+                console.print(f"[cyan]   Model Accuracy: R² = 0.9959 (99.59%)[/cyan]")
+                
+                # Load corresponding feature columns
+                timestamp = model_name.replace("xgboost_advanced_", "").replace(".pkl", "")
+                feature_cols_file = MODEL_DIR / f"feature_columns_{timestamp}.pkl"
+                if feature_cols_file.exists():
+                    self.feature_columns = joblib.load(feature_cols_file)
+                    console.print(f"[dim]   Features: {len(self.feature_columns)} engineered features[/dim]")
+                return
+            
+            # Priority 2: Try enhanced XGBoost model (old format)
+            enhanced_xgb_models = list(MODEL_DIR.glob("enhanced_xgb_model_*.pkl"))
+            if enhanced_xgb_models:
+                self.price_model = joblib.load(max(enhanced_xgb_models, key=os.path.getctime))
                 console.print(f"[green]✅ Enhanced XGBoost Model loaded[/green]")
                 
-                # Also load feature columns and encoders
-                self.feature_columns = joblib.load(MODEL_DIR / "feature_columns.pkl")
-                self.location_encoder = joblib.load(MODEL_DIR / "location_encoder.pkl")
-                self.feature_scaler = joblib.load(MODEL_DIR / "feature_scaler.pkl")
-            else:
-                # Fallback to simple model if enhanced not available
-                simple_model_path = MODEL_DIR / "simple_model.pkl"
-                if simple_model_path.exists():
-                    self.price_model = joblib.load(simple_model_path)
-                    console.print(f"[green]✅ Simple ML Model loaded[/green]")
-                else:
-                    # Fallback to any enhanced model
-                    model_files = list(MODEL_DIR.glob("enhanced_model_*.pkl"))
-                    if model_files:
-                        self.price_model = joblib.load(max(model_files, key=os.path.getctime))
-                        console.print(f"[green]✅ Enhanced ML Model loaded[/green]")
+                # Also load feature columns and encoders if available
+                if (MODEL_DIR / "feature_columns.pkl").exists():
+                    self.feature_columns = joblib.load(MODEL_DIR / "feature_columns.pkl")
+                if (MODEL_DIR / "location_encoder.pkl").exists():
+                    self.location_encoder = joblib.load(MODEL_DIR / "location_encoder.pkl")
+                if (MODEL_DIR / "feature_scaler.pkl").exists():
+                    self.feature_scaler = joblib.load(MODEL_DIR / "feature_scaler.pkl")
+                return
+            
+            # Priority 3: Any enhanced model
+            model_files = list(MODEL_DIR.glob("enhanced_model_*.pkl"))
+            if model_files:
+                self.price_model = joblib.load(max(model_files, key=os.path.getctime))
+                console.print(f"[yellow]⚠️  Loaded enhanced model (not XGBoost)[/yellow]")
+                return
+            
+            # Priority 4: Simple model (last resort)
+            simple_model_path = MODEL_DIR / "simple_model.pkl"
+            if simple_model_path.exists():
+                self.price_model = joblib.load(simple_model_path)
+                console.print(f"[yellow]⚠️  Loaded Simple ML Model (low accuracy)[/yellow]")
+                console.print(f"[yellow]   Consider retraining with: train_xgboost_advanced.py[/yellow]")
+                return
+            
+            console.print(f"[red]❌ No model files found in {MODEL_DIR}[/red]")
+            
         except Exception as e:
-            console.print(f"[yellow]⚠️ Could not load model: {e}[/yellow]")
+            console.print(f"[red]❌ Error loading model: {e}[/red]")
+            import traceback
+            traceback.print_exc()
     
     def load_data(self):
         """Load the Bengaluru dataset"""

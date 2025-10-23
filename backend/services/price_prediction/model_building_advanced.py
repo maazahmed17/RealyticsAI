@@ -8,6 +8,8 @@ to significantly improve the price prediction performance.
 import logging
 import numpy as np
 import pandas as pd
+import shap
+import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Tuple, Optional, List
 from sklearn.base import RegressorMixin

@@ -16,7 +16,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Paths
 BASE_DIR = Path(__file__).parent.parent
-DATA_PATH = "data/bengaluru_house_prices.csv"
+DATA_PATH = BASE_DIR / "data" / "bengaluru_house_prices.csv"
 MODEL_DIR = BASE_DIR / "data" / "models"
 
 # Model Configuration

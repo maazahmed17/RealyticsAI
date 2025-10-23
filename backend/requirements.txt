@@ -41,3 +41,6 @@ psutil==5.9.6
 # Utilities
 pytz==2023.3
 python-dateutil==2.8.2
+
+# Model Explainability
+shap

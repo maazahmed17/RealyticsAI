@@ -157,7 +157,7 @@ class EnhancedPricePredictionService:
         """Try to load an existing trained model"""
         try:
             # Try enhanced model first
-            enhanced_models = list(self.model_path.glob("enhanced_xgb_model*.pkl"))
+            enhanced_models = list(self.model_path.glob("enhanced_model*.pkl"))
             if enhanced_models:
                 model_file = max(enhanced_models, key=os.path.getctime)
                 self.xgb_model = joblib.load(model_file)

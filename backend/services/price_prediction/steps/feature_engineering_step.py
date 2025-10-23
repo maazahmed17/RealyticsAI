@@ -1,5 +1,5 @@
 import pandas as pd
-from src.feature_engineering import (
+from feature_engineering import (
     FeatureEngineer,
     LogTransformation,
     MinMaxScaling,

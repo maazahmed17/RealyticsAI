@@ -6,7 +6,6 @@ Supports CSV, Excel, and ZIP files with automatic feature detection.
 
 import click
 import pandas as pd
-from pipelines.training_pipeline import ml_pipeline
 from steps.data_ingestion_step import data_ingestion_step
 from zenml.integrations.mlflow.mlflow_utils import get_tracking_uri
 

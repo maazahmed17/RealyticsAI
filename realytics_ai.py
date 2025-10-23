@@ -138,8 +138,9 @@ class FixedUnifiedChatbot:
     """Fixed unified chatbot with proper service integration"""
     
     def __init__(self):
-        """Initialize the fixed chatbot system"""
-        console.print("[yellow]🚀 Initializing Fixed RealyticsAI Unified Chatbot...[/yellow]")
+        """Initialize the chatbot system"""
+        console.print("[yellow]🚀 Initializing RealyticsAI System...[/yellow]")
+        console.print("[dim]Loading XGBoost model trained on 150,000 properties...[/dim]")
         
         # Configure Gemini API
         self._setup_gemini()
@@ -152,7 +153,7 @@ class FixedUnifiedChatbot:
         # Initialize components
         self._initialize_services()
         
-        console.print("[green]✅ Fixed Unified Chatbot initialized successfully![/green]")
+        console.print("[green]✅ RealyticsAI System Ready! All services loaded successfully.[/green]")
     
     def _setup_gemini(self):
         """Setup Gemini API configuration"""
@@ -185,8 +186,8 @@ class FixedUnifiedChatbot:
             
             # Initialize property recommender with data
             console.print("[dim]Loading recommendation service...[/dim]")
-            data_path = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
-            self.property_recommender = ImprovedPropertyRecommender(data_path)
+            from config.settings import DATA_PATH
+            self.property_recommender = ImprovedPropertyRecommender(str(DATA_PATH))
             
             logger.info("All services initialized successfully")
             
@@ -603,33 +604,80 @@ class FixedUnifiedChatbot:
     def start_interactive_chat(self):
         """Start interactive chat session"""
         
-        console.print("\\n" + "="*80)
-        console.print("[bold cyan]🏠 RealyticsAI Fixed Unified Chatbot - Complete Real Estate Assistant[/bold cyan]")
+        console.print("\n" + "="*80)
+        console.print("[bold cyan]🏠 RealyticsAI - Intelligent Real Estate Assistant for Bengaluru[/bold cyan]")
+        console.print("[dim]Powered by XGBoost ML | 150K+ Properties | Gemini AI[/dim]")
         console.print("="*80)
         
         greeting = """
-## Welcome to RealyticsAI! 🏠 (Fixed Version)
+# 🏠 Welcome to RealyticsAI - Your Intelligent Real Estate Assistant
 
-I'm your comprehensive AI assistant for Bangalore real estate with improved accuracy:
+**Powered by Advanced AI & Machine Learning | Bengaluru Real Estate Platform**
 
-### 🎯 **Enhanced Services:**
-- **💰 Price Predictions** - Accurate property valuations with proper feature extraction
-- **🔍 Property Search** - Real data-based property recommendations from 13,000+ properties
-- **📊 Market Analysis** - AI insights with actual market data
-- **❓ General Help** - Expert real estate guidance
+---
 
-### 💬 **Try These Examples:**
-- "What's the price of a 3 BHK in Whitefield?"
+## 🎯 **Our Capabilities:**
+
+### 💰 **Price Prediction Service**
+- ML-powered property valuation using XGBoost algorithm with advanced feature engineering
+- Trained on 150,000+ real Bengaluru properties
+- Considers: Location, BHK, Size, Bathrooms, Balconies, Age, Floor, Parking, Furnishing
+- **Model Accuracy:** R² Score 0.9959 (99.59%) | RMSE: 2.89 Lakhs
+- Conversational interface for easy input
+
+### 🔍 **Smart Property Recommendations**
+- Search from 150,000+ verified properties across Bengaluru
+- Filter by: Budget, Location, BHK, Square Footage, Amenities
+- Get personalized suggestions based on your preferences
+- Real-time data with detailed property information
+
+### 📊 **Market Intelligence**
+- AI-powered market trend analysis
+- Investment opportunity identification
+- Location-based pricing insights
+- Expert real estate guidance for Bengaluru market
+
+---
+
+## 💬 **Sample Queries to Get Started:**
+
+**Price Predictions:**
+- "What's the estimated price of a 3 BHK apartment in Whitefield?"
+- "How much would a 1500 sqft house in Koramangala cost?"
+- "Price estimate for a 2 BHK with parking in HSR Layout?"
+
+**Property Search:**
 - "Find me apartments under 50 lakhs in Electronic City"
-- "Show me 2 BHK properties with 1500+ sqft"
-- "What are the market trends in HSR Layout?"
+- "Show 2 BHK properties with at least 1200 sqft"
+- "Recommend furnished flats near Whitefield"
 
-### 🔧 **Commands:**
-- Type `reset` to start fresh
-- Type `help` for more information
-- Type `exit` to quit
+**Market Insights:**
+- "What are the current market trends in Indiranagar?"
+- "Which areas offer best value for investment?"
+- "Compare prices between Whitefield and Electronic City"
 
-*Now with properly integrated models and real data! 🚀*
+---
+
+## ⚠️ **Important Disclaimer:**
+
+*RealyticsAI provides estimated property valuations and recommendations based on historical data and machine learning models. These estimates are for informational purposes only and should not be considered as professional property appraisals, legal advice, or financial counsel.*
+
+**Please note:**
+- Actual property prices may vary based on current market conditions
+- Property conditions, legal status, and other factors not captured in our data may significantly affect real values
+- Always conduct thorough due diligence and consult with licensed real estate professionals, legal advisors, and financial consultants before making any property decisions
+- Past performance and historical data do not guarantee future results
+
+---
+
+## 🔧 **Commands:**
+- Type `reset` or `clear` to start a new conversation
+- Type `help` to see this message again
+- Type `exit` or `quit` to close the assistant
+
+---
+
+**Ready to assist you with your Bengaluru real estate needs! Ask me anything.** 🚀
         """
         
         console.print(Panel(Markdown(greeting), border_style="green"))

@@ -1,7 +1,7 @@
 import logging
 
 import pandas as pd
-from src.outlier_detection import OutlierDetector, ZScoreOutlierDetection
+from outlier_detection import OutlierDetector, ZScoreOutlierDetection
 from zenml import step
 
 

@@ -191,7 +191,7 @@ def property_recommendations():
     """Direct property recommendation endpoint"""
     global unified_chatbot
     
-    if not unified_chatbot or not unified_chatbot.intelligent_router:
+    if not unified_chatbot or not unified_chatbot.property_recommender:
         return jsonify({'error': 'Recommendation service not available'}), 503
     
     try:
@@ -276,8 +276,8 @@ def system_status():
         
         # Check recommendations
         status['services']['property_recommendation'] = (
-            unified_chatbot.intelligent_router is not None and 
-            unified_chatbot.intelligent_router.recommendation_engine is not None
+            unified_chatbot.property_recommender is not None and 
+            unified_chatbot.property_recommender.df is not None
         )
         
         # Check intelligent routing
@@ -311,8 +311,8 @@ def health_check():
             'gemini_api': False,
             'price_prediction': unified_chatbot.price_prediction_bot is not None,
             'recommendations': (
-                unified_chatbot.intelligent_router is not None and 
-                unified_chatbot.intelligent_router.recommendation_engine is not None
+                unified_chatbot.property_recommender is not None and 
+                unified_chatbot.property_recommender.df is not None
             )
         },
         'version': '2.0.0-unified',

@@ -93,8 +93,16 @@ class EnhancedPricePredictionTrainer:
         """Basic data cleaning"""
         console.print("\n[yellow]🧹 Cleaning data...[/yellow]")
         
-        # Handle 'total_sqft' column if it exists and contains ranges
-        if 'total_sqft' in self.data.columns:
+        # Standardize column names to lowercase first
+        self.data.columns = self.data.columns.str.lower()
+        
+        # Drop PropertyID if it exists
+        if 'propertyid' in self.data.columns:
+            self.data = self.data.drop(columns=['propertyid'])
+        
+        # Handle 'total_sqft' or 'totalsqft' column if it exists and contains ranges
+        sqft_col = 'totalsqft' if 'totalsqft' in self.data.columns else 'total_sqft'
+        if sqft_col in self.data.columns:
             def convert_sqft(x):
                 try:
                     if '-' in str(x):
@@ -104,7 +112,19 @@ class EnhancedPricePredictionTrainer:
                 except:
                     return np.nan
             
-            self.data['total_sqft'] = self.data['total_sqft'].apply(convert_sqft)
+            self.data[sqft_col] = self.data[sqft_col].apply(convert_sqft)
+            # Rename to standard name if needed
+            if sqft_col == 'totalsqft':
+                self.data = self.data.rename(columns={'totalsqft': 'total_sqft'})
+        
+        # Rename other columns to match expected format
+        column_mapping = {
+            'propertyageyears': 'property_age',
+            'floornumber': 'floor_number',
+            'totalfloors': 'total_floors',
+            'furnishingstatus': 'furnishing_status'
+        }
+        self.data = self.data.rename(columns=column_mapping)
         
         # Handle 'size' column to extract BHK
         if 'size' in self.data.columns and 'bhk' not in self.data.columns:
@@ -301,6 +321,63 @@ class EnhancedPricePredictionTrainer:
                 results.append(result)
                 
                 console.print(f"[green]✅ {model_name} - Test R²: {test_metrics['r2']:.4f}, RMSE: {test_metrics['rmse']:.2f}[/green]")
+                
+                # --- ADD SHAP EXPLANATIONS FOR XGBOOST ---
+                if model_name == "XGBoost":
+                    console.print(f"[cyan]🔍 Generating SHAP explanations for {model_name}...[/cyan]")
+                    try:
+                        import shap
+                        import matplotlib.pyplot as plt
+                        
+                        # Extract the actual XGBoost model from the pipeline
+                        # The model might be wrapped in a Pipeline, so we need to extract it
+                        if hasattr(model, 'named_steps'):
+                            xgb_model = model.named_steps.get('model', model)
+                        else:
+                            xgb_model = model
+                        
+                        # Create TreeExplainer for XGBoost
+                        explainer = shap.TreeExplainer(xgb_model)
+                        
+                        # Sample test set for faster computation (1000 samples)
+                        sample_size = min(1000, len(self.X_test))
+                        X_test_sample = self.X_test.sample(sample_size, random_state=42)
+                        
+                        # Ensure the data is transformed if it's in a pipeline
+                        if hasattr(model, 'named_steps') and 'scaler' in model.named_steps:
+                            X_test_sample_transformed = model.named_steps['scaler'].transform(X_test_sample)
+                            X_test_sample_transformed = pd.DataFrame(
+                                X_test_sample_transformed, 
+                                columns=X_test_sample.columns,
+                                index=X_test_sample.index
+                            )
+                        else:
+                            X_test_sample_transformed = X_test_sample
+                        
+                        # Calculate SHAP values
+                        shap_values = explainer.shap_values(X_test_sample_transformed)
+                        
+                        # Create and save SHAP summary plot
+                        console.print("[yellow]Saving SHAP summary plot...[/yellow]")
+                        plt.figure()
+                        shap.summary_plot(shap_values, X_test_sample_transformed, show=False)
+                        
+                        # Save plot in the models directory
+                        models_dir = Path(__file__).parent.parent.parent.parent / "data" / "models"
+                        models_dir.mkdir(parents=True, exist_ok=True)
+                        plot_path = models_dir / f"shap_summary_plot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                        plt.savefig(plot_path, bbox_inches='tight', dpi=300)
+                        plt.close()
+                        
+                        console.print(f"[green]✅ SHAP summary plot saved to {plot_path}[/green]")
+                        
+                        # Log plot to MLflow
+                        mlflow.log_artifact(str(plot_path))
+                        console.print("[green]✅ SHAP plot logged to MLflow[/green]")
+                        
+                    except Exception as e:
+                        console.print(f"[yellow]⚠️  Warning: Could not generate SHAP explanations: {e}[/yellow]")
+                # --- END SHAP SNIPPET ---
         
         # Convert results to DataFrame
         self.results = pd.DataFrame(results)

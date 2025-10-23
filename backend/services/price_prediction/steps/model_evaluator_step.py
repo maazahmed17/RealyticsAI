@@ -3,7 +3,7 @@ from typing import Tuple
 
 import pandas as pd
 from sklearn.pipeline import Pipeline
-from src.model_evaluator import ModelEvaluator, RegressionModelEvaluationStrategy
+from model_evaluator import ModelEvaluator, RegressionModelEvaluationStrategy
 from zenml import step
 
 

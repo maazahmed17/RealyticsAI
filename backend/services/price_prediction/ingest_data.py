@@ -50,10 +50,10 @@ class DataIngestorFactory:
         if file_extension == ".zip":
             return ZipDataIngestor()
         elif file_extension == ".csv":
-            from src.csv_data_ingestor import CSVDataIngestor
+            from csv_data_ingestor import CSVDataIngestor
             return CSVDataIngestor()
         elif file_extension in [".xlsx", ".xls"]:
-            from src.csv_data_ingestor import ExcelDataIngestor
+            from csv_data_ingestor import ExcelDataIngestor
             return ExcelDataIngestor()
         else:
             raise ValueError(f"No ingestor available for file extension: {file_extension}")

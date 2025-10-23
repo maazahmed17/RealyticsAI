@@ -1,5 +1,5 @@
 import pandas as pd
-from src.ingest_data import DataIngestor
+from ingest_data import DataIngestor
 
 
 class CSVDataIngestor(DataIngestor):
