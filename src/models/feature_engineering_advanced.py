@@ -47,9 +47,8 @@ class AdvancedFeatureEngineer:
         logger.info("Creating basic derived features...")
         df = df.copy()
         
-        # Price per square foot (if columns exist)
-        if 'total_sqft' in df.columns and 'price' in df.columns:
-            df['price_per_sqft'] = df['price'] / (df['total_sqft'] + 1)  # +1 to avoid division by zero
+        # REMOVED: price_per_sqft feature - it was causing data leakage by using target column
+        # This feature allowed the model to reverse-engineer the price during training
             
         # Total rooms
         if 'bath' in df.columns and 'bhk' in df.columns:
@@ -162,8 +161,10 @@ class AdvancedFeatureEngineer:
         return df
     
     def encode_location_features(self, df: pd.DataFrame, 
-                                target_col: Optional[str] = 'price') -> pd.DataFrame:
-        """Advanced location encoding with multiple strategies"""
+                                target_col: Optional[str] = None,
+                                is_training: bool = True,
+                                location_stats: Optional[Dict] = None) -> pd.DataFrame:
+        """Advanced location encoding WITHOUT data leakage"""
         logger.info("Encoding location features...")
         
         if 'location' not in df.columns:
@@ -171,39 +172,35 @@ class AdvancedFeatureEngineer:
             
         df = df.copy()
         
-        # 1. Frequency encoding
+        # 1. Frequency encoding (safe - doesn't use target)
         location_counts = df['location'].value_counts()
         df['location_frequency'] = df['location'].map(location_counts)
         
-        # 2. Target encoding (if target column exists)
-        if target_col in df.columns:
-            location_price_mean = df.groupby('location')[target_col].mean()
-            location_price_median = df.groupby('location')[target_col].median()
-            location_price_std = df.groupby('location')[target_col].std()
-            
-            df['location_price_mean'] = df['location'].map(location_price_mean)
-            df['location_price_median'] = df['location'].map(location_price_median)
-            df['location_price_std'] = df['location'].map(location_price_std).fillna(0)
-            
-            # Price ratio
-            overall_mean = df[target_col].mean()
-            df['location_price_ratio'] = df['location_price_mean'] / overall_mean
+        # 2. REMOVED target encoding - causes severe data leakage
+        # Target encoding must be done separately with proper cross-validation
+        # to avoid leaking information from the target variable
         
-        # 3. Location clustering
-        if 'location_price_mean' in df.columns:
-            # Create location clusters based on price
-            location_features = df[['location', 'location_price_mean', 'location_frequency']].drop_duplicates('location')
-            
-            if len(location_features) > 5:
+        # 3. Location clustering based on non-target features
+        # Cluster by frequency and property characteristics only
+        if len(location_counts) > 5:
+            # Use only non-target features for clustering
+            numeric_cols = [col for col in ['total_sqft', 'bhk', 'bath', 'balcony'] 
+                           if col in df.columns]
+            if numeric_cols:
+                location_features = df.groupby('location')[numeric_cols].agg(['mean', 'std']).reset_index()
+                location_features.columns = ['location'] + [f'{col}_{stat}' for col, stat in location_features.columns[1:]]
+                location_features['location_frequency'] = location_features['location'].map(location_counts)
+                
+                feature_cols = [col for col in location_features.columns if col != 'location']
+                location_features_filled = location_features[feature_cols].fillna(0)
+                
                 kmeans = KMeans(n_clusters=min(5, len(location_features)), random_state=42)
-                location_features['location_cluster'] = kmeans.fit_predict(
-                    location_features[['location_price_mean', 'location_frequency']].fillna(0)
-                )
+                location_features['location_cluster'] = kmeans.fit_predict(location_features_filled)
                 
                 cluster_map = dict(zip(location_features['location'], location_features['location_cluster']))
-                df['location_cluster'] = df['location'].map(cluster_map)
+                df['location_cluster'] = df['location'].map(cluster_map).fillna(0).astype(int)
         
-        # 4. Is popular location (top 20%)
+        # 4. Is popular location (top 20%) - safe, doesn't use target
         top_locations = location_counts.head(int(len(location_counts) * 0.2)).index
         df['is_popular_location'] = df['location'].isin(top_locations).astype(int)
         
@@ -234,11 +231,12 @@ class AdvancedFeatureEngineer:
     
     def create_statistical_features(self, df: pd.DataFrame, 
                                    group_cols: List[str] = ['location']) -> pd.DataFrame:
-        """Create statistical features based on groupings"""
+        """Create statistical features based on groupings (NO TARGET LEAKAGE)"""
         logger.info("Creating statistical features...")
         df = df.copy()
         
-        numeric_cols = ['total_sqft', 'bath', 'bhk', 'balcony', 'price']
+        # ONLY use non-target numeric columns
+        numeric_cols = ['total_sqft', 'bath', 'bhk', 'balcony']
         numeric_cols = [col for col in numeric_cols if col in df.columns]
         
         for group_col in group_cols:
@@ -246,10 +244,7 @@ class AdvancedFeatureEngineer:
                 continue
                 
             for num_col in numeric_cols:
-                if num_col == 'price':  # Don't use target for feature creation in test
-                    continue
-                    
-                # Group statistics
+                # Group statistics (safe - no target column used)
                 group_stats = df.groupby(group_col)[num_col].agg(['mean', 'std', 'min', 'max'])
                 
                 # Map to original dataframe

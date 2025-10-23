@@ -65,7 +65,7 @@ def calculate_model_metrics():
     
     # Paths
     project_root = Path(__file__).parent.parent
-    data_path = Path("/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv")
+    data_path = Path("/home/maaz/RealyticsAI/data/raw/bengaluru_house_prices.csv")
     model_dir = project_root / "data" / "models"
     
     # Initialize metrics calculator

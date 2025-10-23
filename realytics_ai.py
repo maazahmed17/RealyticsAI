@@ -51,6 +51,23 @@ class ImprovedPropertyRecommender:
             if os.path.exists(self.data_path):
                 self.df = pd.read_csv(self.data_path)
                 
+                # Standardize column names to lowercase
+                self.df.columns = self.df.columns.str.lower()
+                
+                # Map column names to expected format
+                column_mapping = {
+                    'totalsqft': 'total_sqft',
+                    'bhk': 'bhk', 
+                    'location': 'location',
+                    'price': 'price',
+                    'bath': 'bath',
+                    'balcony': 'balcony'
+                }
+                
+                for old_col, new_col in column_mapping.items():
+                    if old_col in self.df.columns and old_col != new_col:
+                        self.df[new_col] = self.df[old_col]
+                
                 # Clean data
                 if 'total_sqft' in self.df.columns:
                     def convert_sqft(x):
@@ -63,11 +80,7 @@ class ImprovedPropertyRecommender:
                             return None
                     self.df['total_sqft'] = self.df['total_sqft'].apply(convert_sqft)
                 
-                # Extract BHK
-                if 'size' in self.df.columns and 'bhk' not in self.df.columns:
-                    self.df['bhk'] = self.df['size'].str.extract('(\\d+)').astype(float)
-                
-                # Clean data
+                # Clean data - drop rows with missing essential data
                 self.df = self.df.dropna(subset=['price', 'location']).reset_index(drop=True)
                 
                 logger.info(f"Loaded {len(self.df)} properties for recommendations")
@@ -85,26 +98,68 @@ class ImprovedPropertyRecommender:
             return {"success": False, "error": "No data available"}
         
         try:
+            logger.info(f"Starting with {len(self.df)} properties")
+            
             # Start with all properties
             filtered_df = self.df.copy()
             
-            # Apply filters
-            if max_price:
-                filtered_df = filtered_df[filtered_df['price'] <= max_price]
-            
+            # Apply location filter first (most restrictive)
             if location:
-                mask = filtered_df['location'].str.contains(location, case=False, na=False)
-                filtered_df = filtered_df[mask]
+                # Try different location matching strategies
+                location_clean = location.lower().strip()
+                
+                # Direct match
+                mask1 = filtered_df['location'].str.lower().str.contains(location_clean, case=False, na=False)
+                
+                # Try without spaces for compound names like "R T Nagar" -> "RT Nagar" or "RTNagar"
+                location_nospace = location_clean.replace(' ', '')
+                mask2 = filtered_df['location'].str.lower().str.replace(' ', '').str.contains(location_nospace, case=False, na=False)
+                
+                # Try partial matches (each word)
+                words = location_clean.split()
+                mask3 = pd.Series([False] * len(filtered_df), index=filtered_df.index)
+                for word in words:
+                    if len(word) > 2:  # Only consider words longer than 2 chars
+                        mask3 |= filtered_df['location'].str.lower().str.contains(word, case=False, na=False)
+                
+                # Combine all masks
+                final_mask = mask1 | mask2 | mask3
+                filtered_df = filtered_df[final_mask]
+                
+                logger.info(f"After location filter: {len(filtered_df)} properties")
+                
+                if len(filtered_df) == 0:
+                    # Try broader search if no results
+                    logger.info("No exact location matches, trying broader search...")
+                    filtered_df = self.df.copy()
+                    # Just try first word of location
+                    if words:
+                        first_word = words[0]
+                        mask_broad = filtered_df['location'].str.lower().str.contains(first_word, case=False, na=False)
+                        filtered_df = filtered_df[mask_broad]
+                        logger.info(f"After broad location filter: {len(filtered_df)} properties")
             
-            if bhk:
+            # Apply other filters
+            if max_price and len(filtered_df) > 0:
+                filtered_df = filtered_df[filtered_df['price'] <= max_price]
+                logger.info(f"After price filter: {len(filtered_df)} properties")
+            
+            if bhk and len(filtered_df) > 0:
                 if 'bhk' in filtered_df.columns:
                     filtered_df = filtered_df[filtered_df['bhk'] == bhk]
-                elif 'size' in filtered_df.columns:
-                    mask = filtered_df['size'].str.contains(f'{bhk} BHK', case=False, na=False)
-                    filtered_df = filtered_df[mask]
+                    logger.info(f"After BHK filter: {len(filtered_df)} properties")
             
-            if min_sqft and 'total_sqft' in filtered_df.columns:
+            if min_sqft and 'total_sqft' in filtered_df.columns and len(filtered_df) > 0:
                 filtered_df = filtered_df[filtered_df['total_sqft'] >= min_sqft]
+                logger.info(f"After sqft filter: {len(filtered_df)} properties")
+            
+            if len(filtered_df) == 0:
+                return {
+                    "success": False,
+                    "error": "No properties found matching the criteria",
+                    "total_found": 0,
+                    "query": query
+                }
             
             # Sort by price (ascending) and get top 5
             recommendations = filtered_df.nsmallest(5, 'price')
@@ -113,15 +168,17 @@ class ImprovedPropertyRecommender:
             rec_list = []
             for _, row in recommendations.iterrows():
                 rec_dict = {
-                    'location': row.get('location', 'Unknown'),
-                    'size': row.get('size', 'Unknown'),
-                    'price_lakhs': row.get('price', 0),
-                    'total_sqft': row.get('total_sqft', 0),
-                    'bhk': row.get('bhk', 0),
-                    'bath': row.get('bath', 0),
-                    'balcony': row.get('balcony', 0)
+                    'location': str(row.get('location', 'Unknown')),
+                    'price': float(row.get('price', 0)),
+                    'total_sqft': float(row.get('total_sqft', 0)) if pd.notna(row.get('total_sqft')) else 0,
+                    'bhk': int(row.get('bhk', 0)) if pd.notna(row.get('bhk')) else 0,
+                    'bath': int(row.get('bath', 0)) if pd.notna(row.get('bath')) else 0,
+                    'balcony': int(row.get('balcony', 0)) if pd.notna(row.get('balcony')) else 0,
+                    'property_type': 'Apartment'  # Default type
                 }
                 rec_list.append(rec_dict)
+            
+            logger.info(f"Returning {len(rec_list)} recommendations")
             
             return {
                 "success": True,
@@ -138,9 +195,8 @@ class FixedUnifiedChatbot:
     """Fixed unified chatbot with proper service integration"""
     
     def __init__(self):
-        """Initialize the chatbot system"""
-        console.print("[yellow]🚀 Initializing RealyticsAI System...[/yellow]")
-        console.print("[dim]Loading XGBoost model trained on 150,000 properties...[/dim]")
+        """Initialize the fixed chatbot system"""
+        console.print("[yellow]🚀 Initializing Fixed RealyticsAI Unified Chatbot...[/yellow]")
         
         # Configure Gemini API
         self._setup_gemini()
@@ -153,7 +209,7 @@ class FixedUnifiedChatbot:
         # Initialize components
         self._initialize_services()
         
-        console.print("[green]✅ RealyticsAI System Ready! All services loaded successfully.[/green]")
+        console.print("[green]✅ Fixed Unified Chatbot initialized successfully![/green]")
     
     def _setup_gemini(self):
         """Setup Gemini API configuration"""
@@ -186,8 +242,8 @@ class FixedUnifiedChatbot:
             
             # Initialize property recommender with data
             console.print("[dim]Loading recommendation service...[/dim]")
-            from config.settings import DATA_PATH
-            self.property_recommender = ImprovedPropertyRecommender(str(DATA_PATH))
+            data_path = "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
+            self.property_recommender = ImprovedPropertyRecommender(data_path)
             
             logger.info("All services initialized successfully")
             
@@ -340,13 +396,36 @@ class FixedUnifiedChatbot:
         if sqft_match:
             params["min_sqft"] = float(sqft_match.group(1))
         
-        # Extract location (common Bangalore areas)
-        locations = ['whitefield', 'koramangala', 'hsr layout', 'electronic city', 'hebbal', 
-                    'marathahalli', 'indiranagar', 'jayanagar', 'btm layout', 'jp nagar']
+        # Extract location (common Bangalore areas and patterns)
+        locations = [
+            'whitefield', 'koramangala', 'hsr layout', 'electronic city', 'hebbal', 
+            'marathahalli', 'indiranagar', 'jayanagar', 'btm layout', 'jp nagar',
+            'r t nagar', 'rt nagar', 'rajaji nagar', 'banashankari', 'vijayanagar',
+            'malleshwaram', 'basavanagudi', 'yelahanka', 'sarjapur', 'bellandur'
+        ]
+        
+        # First try exact location matches
         for loc in locations:
             if loc in query_lower:
                 params["location"] = loc.title()
                 break
+        
+        # If no exact match, try pattern matching for locations like "properties in XYZ"
+        if "location" not in params:
+            import re
+            location_patterns = [
+                r'in\s+([a-zA-Z\s]+?)(?:\s+area|\s+location|\s*$|\s+with|\s+under)',
+                r'at\s+([a-zA-Z\s]+?)(?:\s+area|\s+location|\s*$|\s+with|\s+under)',
+                r'near\s+([a-zA-Z\s]+?)(?:\s+area|\s+location|\s*$|\s+with|\s+under)'
+            ]
+            
+            for pattern in location_patterns:
+                match = re.search(pattern, query_lower)
+                if match:
+                    extracted_loc = match.group(1).strip()
+                    if len(extracted_loc) > 2:  # Avoid very short matches
+                        params["location"] = extracted_loc.title()
+                        break
         
         return {
             "intent": intent,
@@ -455,9 +534,10 @@ class FixedUnifiedChatbot:
                 # Create detailed response with Gemini
                 properties_text = ""
                 for i, prop in enumerate(properties[:3], 1):  # Show top 3
+                    bhk_text = f"{prop['bhk']} BHK" if prop['bhk'] > 0 else "Apartment"
                     properties_text += f"""
-                    {i}. **{prop['location']}** - {prop['size']} 
-                       • Price: ₹{prop['price_lakhs']:.1f} Lakhs
+                    {i}. **{prop['location']}** - {bhk_text} 
+                       • Price: ₹{prop['price']:.1f} Lakhs
                        • Size: {prop['total_sqft']:.0f} sqft
                        • Bathrooms: {prop['bath']}, Balconies: {prop['balcony']}
                     """
@@ -554,44 +634,91 @@ class FixedUnifiedChatbot:
             }
     
     def _handle_general_query(self, query: str, analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle general real estate queries using Gemini"""
-        try:
-            general_prompt = f"""
-            You are an expert real estate assistant for Bangalore/Bengaluru market. 
-            Answer this query with helpful, accurate information:
-            
-            Query: "{query}"
-            
-            Provide:
-            1. Direct answer to the question
-            2. Relevant context about Bangalore real estate
-            3. Practical advice if applicable
-            4. Suggestions for next steps if relevant
-            
-            Available services to mention:
-            - Property price predictions (provide property details)  
-            - Property search and recommendations
-            - Market analysis and investment advice
-            
-            Keep response conversational and helpful.
-            """
-            
-            response = self.gemini_model.generate_content(general_prompt)
-            
+        """Handle general real estate queries with fast responses"""
+        query_lower = query.lower().strip()
+        
+        # Fast responses for common greetings
+        greetings = ['hello', 'hi', 'hey', 'good morning', 'good evening', 'good afternoon']
+        if any(greeting in query_lower for greeting in greetings):
             return {
                 "success": True,
                 "service": "general_query",
                 "intent_analysis": analysis,
-                "response": response.text
+                "response": "Hello! I'm your RealyticsAI assistant for Bangalore real estate. I can help you with:\n\n• **Property Price Estimates** - Get accurate valuations\n• **Property Search** - Find properties matching your criteria\n• **Market Insights** - Current trends and investment advice\n\nWhat would you like to know about today?"
             }
+        
+        # Fast responses for simple queries
+        simple_responses = {
+            "what can you do": "I'm RealyticsAI, your comprehensive real estate assistant for Bangalore. I can:\n\n• **Estimate Property Prices** - Provide accurate valuations based on location, size, and amenities\n• **Find Properties** - Search through 13,000+ properties based on your budget and preferences\n• **Market Analysis** - Share insights on trends, investment opportunities, and area comparisons\n\nTry asking: 'What's the price of a 3 BHK in Whitefield?' or 'Show me apartments under 80 lakhs'",
+            "help": "I'm here to help with all your Bangalore real estate needs!\n\n**Quick Commands:**\n• Ask for price estimates: 'Price of 2 BHK in Koramangala'\n• Search properties: 'Show 3 BHK apartments under 1 crore'\n• Get market insights: 'Best areas for investment'\n\nWhat specific information are you looking for?",
+            "thank you": "You're welcome! Feel free to ask me anything about Bangalore real estate - property prices, recommendations, or market insights. I'm here to help!",
+            "thanks": "You're welcome! Let me know if you need any property-related information."
+        }
+        
+        for key, response in simple_responses.items():
+            if key in query_lower:
+                return {
+                    "success": True,
+                    "service": "general_query",
+                    "intent_analysis": analysis,
+                    "response": response
+                }
+        
+        # For complex queries, use Gemini with timeout
+        try:
+            import concurrent.futures
+            
+            def get_gemini_response():
+                general_prompt = f"""
+                You are an expert real estate assistant for Bangalore/Bengaluru market. 
+                Answer this query with helpful, accurate information:
+                
+                Query: "{query}"
+                
+                Provide:
+                1. Direct answer to the question
+                2. Relevant context about Bangalore real estate
+                3. Practical advice if applicable
+                4. Suggestions for next steps if relevant
+                
+                Available services to mention:
+                - Property price predictions (provide property details)  
+                - Property search and recommendations
+                - Market analysis and investment advice
+                
+                Keep response conversational and helpful. Limit to 200 words.
+                """
+                
+                response = self.gemini_model.generate_content(general_prompt)
+                return response.text
+            
+            # Use thread with timeout
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(get_gemini_response)
+                try:
+                    response_text = future.result(timeout=5)  # 5 second timeout
+                    return {
+                        "success": True,
+                        "service": "general_query",
+                        "intent_analysis": analysis,
+                        "response": response_text
+                    }
+                except concurrent.futures.TimeoutError:
+                    # Timeout fallback
+                    return {
+                        "success": True,
+                        "service": "general_query", 
+                        "intent_analysis": analysis,
+                        "response": "I'm here to help with Bangalore real estate! Ask me about property prices, search for apartments, or get market insights. For example:\n\n• 'What's the price of a 3 BHK in Whitefield?'\n• 'Show me 2 BHK apartments under 75 lakhs'\n• 'Best areas for investment in Bangalore'\n\nWhat would you like to know?"
+                    }
             
         except Exception as e:
             logger.error(f"Error in general query: {e}")
             return {
-                "success": False,
+                "success": True,  # Still return success with fallback
                 "service": "general_query",
-                "error": str(e), 
-                "response": "I apologize, but I couldn't process your question at the moment. Please try rephrasing or ask about specific property details."
+                "intent_analysis": analysis,
+                "response": "I'm RealyticsAI, your Bangalore real estate assistant! I can help you with property valuations, find apartments, and provide market insights. What would you like to explore?"
             }
     
     def reset_conversation(self):
@@ -604,80 +731,33 @@ class FixedUnifiedChatbot:
     def start_interactive_chat(self):
         """Start interactive chat session"""
         
-        console.print("\n" + "="*80)
-        console.print("[bold cyan]🏠 RealyticsAI - Intelligent Real Estate Assistant for Bengaluru[/bold cyan]")
-        console.print("[dim]Powered by XGBoost ML | 150K+ Properties | Gemini AI[/dim]")
+        console.print("\\n" + "="*80)
+        console.print("[bold cyan]🏠 RealyticsAI Fixed Unified Chatbot - Complete Real Estate Assistant[/bold cyan]")
         console.print("="*80)
         
         greeting = """
-# 🏠 Welcome to RealyticsAI - Your Intelligent Real Estate Assistant
+## Welcome to RealyticsAI! 🏠 
 
-**Powered by Advanced AI & Machine Learning | Bengaluru Real Estate Platform**
+I'm your comprehensive AI assistant for Bangalore real estate with improved accuracy:
 
----
+### 🎯 **Enhanced Services:**
+- **💰 Price Predictions** - Accurate property valuations with proper feature extraction
+- **🔍 Property Search** - Real data-based property recommendations from 13,000+ properties
+- **📊 Market Analysis** - AI insights with actual market data
+- **❓ General Help** - Expert real estate guidance
 
-## 🎯 **Our Capabilities:**
-
-### 💰 **Price Prediction Service**
-- ML-powered property valuation using XGBoost algorithm with advanced feature engineering
-- Trained on 150,000+ real Bengaluru properties
-- Considers: Location, BHK, Size, Bathrooms, Balconies, Age, Floor, Parking, Furnishing
-- **Model Accuracy:** R² Score 0.9959 (99.59%) | RMSE: 2.89 Lakhs
-- Conversational interface for easy input
-
-### 🔍 **Smart Property Recommendations**
-- Search from 150,000+ verified properties across Bengaluru
-- Filter by: Budget, Location, BHK, Square Footage, Amenities
-- Get personalized suggestions based on your preferences
-- Real-time data with detailed property information
-
-### 📊 **Market Intelligence**
-- AI-powered market trend analysis
-- Investment opportunity identification
-- Location-based pricing insights
-- Expert real estate guidance for Bengaluru market
-
----
-
-## 💬 **Sample Queries to Get Started:**
-
-**Price Predictions:**
-- "What's the estimated price of a 3 BHK apartment in Whitefield?"
-- "How much would a 1500 sqft house in Koramangala cost?"
-- "Price estimate for a 2 BHK with parking in HSR Layout?"
-
-**Property Search:**
+### 💬 **Try These Examples:**
+- "What's the price of a 3 BHK in Whitefield?"
 - "Find me apartments under 50 lakhs in Electronic City"
-- "Show 2 BHK properties with at least 1200 sqft"
-- "Recommend furnished flats near Whitefield"
+- "Show me 2 BHK properties with 1500+ sqft"
+- "What are the market trends in HSR Layout?"
 
-**Market Insights:**
-- "What are the current market trends in Indiranagar?"
-- "Which areas offer best value for investment?"
-- "Compare prices between Whitefield and Electronic City"
+### 🔧 **Commands:**
+- Type `reset` to start fresh
+- Type `help` for more information
+- Type `exit` to quit
 
----
-
-## ⚠️ **Important Disclaimer:**
-
-*RealyticsAI provides estimated property valuations and recommendations based on historical data and machine learning models. These estimates are for informational purposes only and should not be considered as professional property appraisals, legal advice, or financial counsel.*
-
-**Please note:**
-- Actual property prices may vary based on current market conditions
-- Property conditions, legal status, and other factors not captured in our data may significantly affect real values
-- Always conduct thorough due diligence and consult with licensed real estate professionals, legal advisors, and financial consultants before making any property decisions
-- Past performance and historical data do not guarantee future results
-
----
-
-## 🔧 **Commands:**
-- Type `reset` or `clear` to start a new conversation
-- Type `help` to see this message again
-- Type `exit` or `quit` to close the assistant
-
----
-
-**Ready to assist you with your Bengaluru real estate needs! Ask me anything.** 🚀
+*Now with properly integrated models and real data! 🚀*
         """
         
         console.print(Panel(Markdown(greeting), border_style="green"))

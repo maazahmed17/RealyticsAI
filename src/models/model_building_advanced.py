@@ -56,38 +56,60 @@ class XGBoostStrategy(ModelBuildingStrategy):
     """XGBoost Regressor with optimized hyperparameters"""
     
     def __init__(self, **kwargs):
+        # Reduced overfitting with stronger regularization
         self.params = {
-            'n_estimators': kwargs.get('n_estimators', 300),
-            'max_depth': kwargs.get('max_depth', 8),
+            'n_estimators': kwargs.get('n_estimators', 1000),
+            'max_depth': kwargs.get('max_depth', 5),  # Reduced from 8 to prevent overfitting
             'learning_rate': kwargs.get('learning_rate', 0.05),
             'subsample': kwargs.get('subsample', 0.8),
-            'colsample_bytree': kwargs.get('colsample_bytree', 0.8),
+            'colsample_bytree': kwargs.get('colsample_bytree', 0.7),  # Reduced from 0.8
             'gamma': kwargs.get('gamma', 0.1),
-            'reg_alpha': kwargs.get('reg_alpha', 0.1),
-            'reg_lambda': kwargs.get('reg_lambda', 1.0),
+            'reg_alpha': kwargs.get('reg_alpha', 0.5),  # Increased L1 regularization
+            'reg_lambda': kwargs.get('reg_lambda', 1.0),  # L2 regularization
             'min_child_weight': kwargs.get('min_child_weight', 3),
-            'random_state': kwargs.get('random_state', 42)
+            'random_state': kwargs.get('random_state', 42),
+            'objective': 'reg:squarederror',
+            'n_jobs': -1
         }
     
     def build_and_train_model(self, X_train: pd.DataFrame, y_train: pd.Series,
                             X_val: Optional[pd.DataFrame] = None,
                             y_val: Optional[pd.Series] = None) -> Pipeline:
-        logger.info("Building XGBoost model with optimized parameters...")
+        logger.info("Building XGBoost model with anti-overfitting parameters...")
+        
+        model = xgb.XGBRegressor(**self.params, verbosity=0)
         
         pipeline = Pipeline([
             ('scaler', RobustScaler()),
-            ('model', xgb.XGBRegressor(**self.params, verbosity=0))
+            ('model', model)
         ])
         
+        # CRITICAL: Use early stopping with validation set to prevent overfitting
         if X_val is not None and y_val is not None:
-            eval_set = [(X_val, y_val)]
-            pipeline.named_steps['model'].set_params(
-                eval_set=eval_set,
+            logger.info("Training with early stopping on validation set...")
+            # Scale the data first
+            scaler = RobustScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_val_scaled = scaler.transform(X_val)
+            
+            # Fit with early stopping
+            model.fit(
+                X_train_scaled, y_train,
+                eval_set=[(X_val_scaled, y_val)],
                 early_stopping_rounds=50,
                 verbose=False
             )
+            
+            # Create pipeline with fitted components
+            pipeline = Pipeline([
+                ('scaler', scaler),
+                ('model', model)
+            ])
+            logger.info(f"Training stopped at {model.best_iteration} iterations (early stopping)")
+        else:
+            logger.warning("No validation set provided - training without early stopping")
+            pipeline.fit(X_train, y_train)
         
-        pipeline.fit(X_train, y_train)
         logger.info("XGBoost model training completed")
         return pipeline
     
@@ -175,11 +197,12 @@ class EnhancedRandomForestStrategy(ModelBuildingStrategy):
     """Enhanced Random Forest with optimized parameters"""
     
     def __init__(self, **kwargs):
+        # Reduced overfitting with proper constraints
         self.params = {
             'n_estimators': kwargs.get('n_estimators', 200),
-            'max_depth': kwargs.get('max_depth', 20),
-            'min_samples_split': kwargs.get('min_samples_split', 5),
-            'min_samples_leaf': kwargs.get('min_samples_leaf', 2),
+            'max_depth': kwargs.get('max_depth', 10),  # Reduced from 20 to prevent overfitting
+            'min_samples_split': kwargs.get('min_samples_split', 10),  # Increased from 5
+            'min_samples_leaf': kwargs.get('min_samples_leaf', 4),  # Increased from 2
             'max_features': kwargs.get('max_features', 'sqrt'),
             'bootstrap': kwargs.get('bootstrap', True),
             'oob_score': kwargs.get('oob_score', True),

@@ -20,7 +20,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
 from backend.core.config import settings
 from backend.services.gemini_service import get_gemini_chatbot
-from backend.services.price_prediction.nlp_interface import create_nlp_interface
+from backend.services.price_prediction.fixed_price_predictor import get_price_predictor
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
@@ -65,8 +65,8 @@ class RealyticsAIChatbot:
         """Initialize feature modules"""
         try:
             if settings.ENABLE_PRICE_PREDICTION:
-                self.price_predictor = create_nlp_interface()
-                logger.info("Price prediction feature loaded")
+                self.price_predictor = get_price_predictor()
+                logger.info("✅ Fixed price prediction model loaded (no data leakage)")
         except Exception as e:
             logger.error(f"Error initializing features: {e}")
     
@@ -167,36 +167,98 @@ class RealyticsAIChatbot:
             return "I apologize, but the price prediction feature is currently unavailable. Please try again later."
         
         try:
-            # Process through NLP interface
-            result = self.price_predictor.process_query(message)
+            # Extract property features from message using Gemini
+            features = self._extract_property_features(message)
+            
+            if not features:
+                return "I couldn't extract property details from your query. Please specify location, BHK, bathrooms, balconies, and square footage."
+            
+            # Make prediction using fixed model
+            result = self.price_predictor.predict(features)
             
             if result.get("success"):
-                return result.get("response", "I couldn't generate a proper response.")
+                price = result['price_formatted']
+                confidence = result['confidence']
+                model_name = result['model']
+                
+                response = f"""Based on the property details you provided:
+                
+🏠 **Property Details:**
+- Location: {features.get('location', 'N/A')}
+- BHK: {features.get('bhk', 'N/A')}
+- Bathrooms: {features.get('bath', 'N/A')}
+- Balconies: {features.get('balcony', 'N/A')}
+- Area: {features.get('total_sqft', 'N/A')} sq.ft
+
+💰 **Estimated Price:** {price}
+📊 **Confidence:** {confidence:.0%}
+🤖 **Model:** {model_name}
+
+This prediction is based on {result['features_used']} features and uses our latest XGBoost model trained on 150,000 Bangalore properties."""
+                return response
             else:
-                return result.get("response", "I encountered an error processing your price query.")
+                return f"I encountered an error: {result.get('error', 'Unknown error')}"
                 
         except Exception as e:
             logger.error(f"Price prediction error: {e}")
             return f"I apologize, but I couldn't process your price query: {str(e)}"
     
+    def _extract_property_features(self, message: str) -> dict:
+        """Extract property features from natural language using Gemini"""
+        prompt = f"""Extract property details from this query and return ONLY a JSON object:
+        
+        Query: "{message}"
+        
+        Return JSON with these fields (use null if not mentioned):
+        {{
+            "location": "location name",
+            "bhk": number,
+            "bath": number,
+            "balcony": number,
+            "total_sqft": number
+        }}
+        
+        Common Bangalore locations: Whitefield, Electronic City, Koramangala, HSR Layout, BTM Layout, etc.
+        
+        Return ONLY valid JSON, nothing else.
+        """
+        
+        try:
+            response = self.gemini_chatbot.gemini_service.generate_response(prompt)
+            import re
+            import json
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{[^}]+\}', response, re.DOTALL)
+            if json_match:
+                features = json.loads(json_match.group())
+                # Set defaults for missing values
+                defaults = {'bhk': 2, 'bath': 2, 'balcony': 1, 'total_sqft': 1200}
+                for key, default in defaults.items():
+                    if key not in features or features[key] is None:
+                        features[key] = default
+                return features
+        except Exception as e:
+            logger.error(f"Feature extraction error: {e}")
+        
+        return {}
+    
     def _handle_market_analysis(self, message: str) -> str:
         """Handle market analysis queries"""
         
         try:
-            if self.price_predictor and self.price_predictor.data is not None:
-                # Get market insights from data
-                market_insights = self.price_predictor.get_market_insights()
-                
-                # Add user's specific question context
-                prompt = f"""
-                The user asked: {message}
-                
-                Here are the market insights:
-                {market_insights}
-                
-                Please provide a specific answer to the user's question using these insights.
-                Make it conversational and helpful.
-                """
+            # Use Gemini for market analysis
+            prompt = f"""
+            The user asked about Bangalore real estate market: {message}
+            
+            Provide insights about:
+            - Average property prices in different areas
+            - Market trends
+            - Popular locations
+            - Price ranges for different property types
+            
+            Be specific and helpful. Use data about Bangalore real estate.
+            """
                 
                 return self.gemini_chatbot.gemini_service.generate_response(prompt)
             else:

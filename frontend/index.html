@@ -28,9 +28,8 @@
             </button>
             <div class="logo-container">
                 <div class="logo-icon">
-                    <i class="ph ph-house-line"></i>
+                    <span class="logo-r">r</span><span class="logo-ai-icon">AI</span>
                 </div>
-                <span class="logo-text">RealyticsAI</span>
             </div>
         </div>
         
@@ -70,7 +69,14 @@
         <!-- Chat Header -->
         <header class="chat-header">
             <div class="header-content">
-                <h1 class="chat-title">Property Intelligence Assistant</h1>
+                <div class="header-logo-title">
+                    <div class="header-logo">
+                        <span class="header-logo-text">
+                            <span class="header-r">r</span><span class="header-ai">AI</span>
+                        </span>
+                    </div>
+                    <h1 class="chat-title">RealyticsAI</h1>
+                </div>
                 <div class="header-actions">
                     <button class="icon-btn" id="rightSidebarToggle" title="Show Details">
                         <i class="ph ph-sidebar-simple"></i>
@@ -100,25 +106,32 @@
                     
                     <!-- Features Dropdown Menu -->
                     <div class="features-menu" id="featuresMenu">
-                        <button class="feature-item" data-feature="price">
-                            <i class="ph ph-tag"></i>
+                        <button class="feature-item auto-mode" data-feature="auto">
+                            <i class="ph ph-magic-wand"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">Auto Mode</span>
+                                <span class="feature-desc">AI identifies intent automatically</span>
+                            </div>
+                        </button>
+                        <button class="feature-item" data-feature="recommendation">
+                            <i class="ph ph-buildings"></i>
+                            <div class="feature-info">
+                                <span class="feature-name">Property Recommendation</span>
+                                <span class="feature-desc">Find matching properties</span>
+                            </div>
+                        </button>
+                        <button class="feature-item" data-feature="valuation">
+                            <i class="ph ph-currency-dollar"></i>
                             <div class="feature-info">
                                 <span class="feature-name">Price Valuation</span>
                                 <span class="feature-desc">Estimate property value</span>
                             </div>
                         </button>
-                        <button class="feature-item disabled" data-feature="discover">
-                            <i class="ph ph-map-pin"></i>
-                            <div class="feature-info">
-                                <span class="feature-name">Property Discovery</span>
-                                <span class="feature-desc">Coming Soon</span>
-                            </div>
-                        </button>
-                        <button class="feature-item disabled" data-feature="negotiate">
+                        <button class="feature-item" data-feature="negotiation">
                             <i class="ph ph-handshake"></i>
                             <div class="feature-info">
                                 <span class="feature-name">AI Negotiation</span>
-                                <span class="feature-desc">Coming Soon</span>
+                                <span class="feature-desc">Negotiate property deals</span>
                             </div>
                         </button>
                     </div>
@@ -163,7 +176,11 @@
         <div class="loading-spinner"></div>
     </div>
     
+    <!-- Markdown parser for formatting responses -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    
     <!-- Scripts -->
-    <script src="app.js"></script>
+    <script src="App.js"></script>
 </body>
 </html>

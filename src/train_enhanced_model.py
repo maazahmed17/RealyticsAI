@@ -35,13 +35,13 @@ from rich.progress import track
 from rich import print as rprint
 
 # Import custom modules
-from feature_engineering_advanced import AdvancedFeatureEngineer
-from model_building_advanced import (
+from models.feature_engineering_advanced import AdvancedFeatureEngineer
+from models.model_building_advanced import (
     ModelBuilder, XGBoostStrategy, LightGBMStrategy, 
     EnhancedRandomForestStrategy, GradientBoostingStrategy,
     EnsembleStrategy, compare_models
 )
-from hyperparameter_tuning import HyperparameterTuner, quick_tune
+from models.hyperparameter_tuning import HyperparameterTuner, quick_tune
 
 warnings.filterwarnings('ignore')
 console = Console()
@@ -52,11 +52,13 @@ class EnhancedPricePredictionTrainer:
     
     def __init__(self, data_path: str = None):
         """Initialize the trainer"""
-        self.data_path = data_path or "/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv"
+        self.data_path = data_path or "/home/maaz/RealyticsAI/data/raw/bengaluru_house_prices.csv"
         self.data = None
         self.X_train = None
+        self.X_val = None
         self.X_test = None
         self.y_train = None
+        self.y_val = None
         self.y_test = None
         self.best_model = None
         self.feature_engineer = AdvancedFeatureEngineer()
@@ -182,12 +184,18 @@ class EnhancedPricePredictionTrainer:
         
         console.print(f"[cyan]📊 Final feature shape: {X.shape}[/cyan]")
         
-        # Split data
-        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+        # Split data with validation set for early stopping
+        # First split: 80% train+val, 20% test
+        X_temp, self.X_test, y_temp, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
         
-        console.print(f"[green]✅ Train set: {self.X_train.shape}, Test set: {self.X_test.shape}[/green]")
+        # Second split: 75% train, 25% validation (of the 80%)
+        self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
+            X_temp, y_temp, test_size=0.25, random_state=42
+        )
+        
+        console.print(f"[green]✅ Train: {self.X_train.shape}, Val: {self.X_val.shape}, Test: {self.X_test.shape}[/green]")
         
         # Feature importance analysis
         self._analyze_feature_importance()
@@ -216,8 +224,9 @@ class EnhancedPricePredictionTrainer:
         top_n = min(50, len(mi_scores))
         self.selected_features = mi_scores.head(top_n).index.tolist()
         
-        # Update training and test sets with selected features
+        # Update training, validation, and test sets with selected features
         self.X_train = self.X_train[self.selected_features]
+        self.X_val = self.X_val[self.selected_features]
         self.X_test = self.X_test[self.selected_features]
         
         console.print(f"[green]✅ Selected top {len(self.selected_features)} features for modeling[/green]")
@@ -246,12 +255,17 @@ class EnhancedPricePredictionTrainer:
                 mlflow.log_param("model_type", model_name)
                 mlflow.log_param("n_features", len(self.selected_features))
                 mlflow.log_param("train_size", len(self.X_train))
+                mlflow.log_param("val_size", len(self.X_val))
                 mlflow.log_param("test_size", len(self.X_test))
                 
-                # Build and train model
+                # Build and train model WITH VALIDATION SET
                 builder = ModelBuilder(strategy)
                 
-                if use_tuning and model_name in ['XGBoost', 'LightGBM', 'Random Forest']:
+                # Pass validation set to XGBoost for early stopping
+                if model_name == 'XGBoost':
+                    model = builder.build_model(self.X_train, self.y_train, 
+                                               X_val=self.X_val, y_val=self.y_val)
+                elif use_tuning and model_name in ['XGBoost', 'LightGBM', 'Random Forest']:
                     # Use hyperparameter tuning for key models
                     console.print(f"[cyan]🔍 Tuning hyperparameters for {model_name}...[/cyan]")
                     tuner = HyperparameterTuner(scoring='r2', cv=5)

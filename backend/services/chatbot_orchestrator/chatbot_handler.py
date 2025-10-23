@@ -17,8 +17,8 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
-# Import price prediction service
-from services.price_prediction.main import PricePredictionSystem, Config
+# Import fixed price prediction service
+from backend.services.price_prediction.fixed_price_predictor import get_price_predictor
 
 class Intent(Enum):
     """User intent types"""
@@ -96,12 +96,10 @@ class RealyticsAIChatbot:
         ]
     
     def _initialize_predictor(self):
-        """Initialize the price prediction system"""
+        """Initialize the fixed price prediction system"""
         try:
-            self.price_predictor = PricePredictionSystem()
-            # Load data and train model
-            if self.price_predictor.load_data():
-                self.price_predictor.train_model("linear")
+            self.price_predictor = get_price_predictor()
+            print("✅ Fixed price prediction model loaded (no data leakage)")
         except Exception as e:
             print(f"Warning: Could not initialize price predictor: {e}")
     

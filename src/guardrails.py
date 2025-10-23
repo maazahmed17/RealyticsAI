@@ -40,8 +40,14 @@ class PredictionGuardrails:
         try:
             self.data = pd.read_csv(self.data_path)
             
-            # Clean total_sqft column
-            if 'total_sqft' in self.data.columns:
+            # Clean sqft column - handle different column name variations
+            sqft_col = None
+            if 'TotalSqft' in self.data.columns:
+                sqft_col = 'TotalSqft'
+            elif 'total_sqft' in self.data.columns:
+                sqft_col = 'total_sqft'
+            
+            if sqft_col:
                 def convert_sqft(x):
                     try:
                         if '-' in str(x):
@@ -50,10 +56,30 @@ class PredictionGuardrails:
                         return float(x)
                     except:
                         return np.nan
-                self.data['total_sqft'] = self.data['total_sqft'].apply(convert_sqft)
+                self.data[sqft_col] = self.data[sqft_col].apply(convert_sqft)
+                # Normalize column name for later use
+                if sqft_col != 'total_sqft':
+                    self.data['total_sqft'] = self.data[sqft_col]
             
-            # Calculate price per sqft
-            self.data['price_per_sqft'] = (self.data['price'] * 100000) / self.data['total_sqft']
+            # Calculate price per sqft - handle different column name variations
+            price_col = None
+            if 'Price' in self.data.columns:
+                price_col = 'Price'
+            elif 'price' in self.data.columns:
+                price_col = 'price'
+            
+            sqft_col = None
+            if 'TotalSqft' in self.data.columns:
+                sqft_col = 'TotalSqft'
+            elif 'total_sqft' in self.data.columns:
+                sqft_col = 'total_sqft'
+            
+            if price_col and sqft_col:
+                self.data['price_per_sqft'] = (self.data[price_col] * 100000) / self.data[sqft_col]
+            else:
+                logger.error(f"Missing required columns. Available columns: {list(self.data.columns)}")
+                self.data = pd.DataFrame()
+                return
             
             # Remove obvious outliers (price_per_sqft < 1000 or > 50000)
             self.data = self.data[
@@ -61,9 +87,15 @@ class PredictionGuardrails:
                 (self.data['price_per_sqft'] <= 50000)
             ]
             
-            # Clean location names
-            if 'location' in self.data.columns:
-                self.data['location_clean'] = self.data['location'].str.strip().str.lower()
+            # Clean location names - handle different column name variations
+            location_col = None
+            if 'Location' in self.data.columns:
+                location_col = 'Location'
+            elif 'location' in self.data.columns:
+                location_col = 'location'
+            
+            if location_col:
+                self.data['location_clean'] = self.data[location_col].str.strip().str.lower()
             
             logger.info(f"Loaded {len(self.data)} properties for guardrail analysis")
             

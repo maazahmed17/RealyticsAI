@@ -90,6 +90,11 @@ class RealyticsAI {
 
     toggleRightSidebar() {
         this.rightSidebar.classList.toggle('hidden');
+        // Also toggle chat container margin for side-by-side view
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) {
+            chatContainer.classList.toggle('sidebar-open', !this.rightSidebar.classList.contains('hidden'));
+        }
     }
 
     // Features Menu
@@ -107,12 +112,17 @@ class RealyticsAI {
     selectFeature(item) {
         const feature = item.dataset.feature;
         const prompts = {
-            'price': 'Estimate the price of a property: ',
-            'discover': 'Help me discover properties: ',
-            'negotiate': 'Assist with negotiation for: '
+            'auto': '', // Auto mode - no prefix, let AI identify intent
+            'recommendation': 'Find me properties: ',
+            'valuation': 'Estimate the price of a property: ',
+            'negotiation': 'Help me negotiate for: '
         };
         
-        if (prompts[feature]) {
+        if (feature === 'auto') {
+            // Auto mode - focus input without prefix
+            this.messageInput.focus();
+            this.messageInput.placeholder = 'Ask anything about properties - AI will understand automatically...';
+        } else if (prompts[feature]) {
             this.messageInput.value = prompts[feature];
             this.messageInput.focus();
             this.handleInputChange();
@@ -280,8 +290,25 @@ class RealyticsAI {
             await this.addStreamingMessage(data.response);
             
             // Show valuation card if it's a valuation response
-            if (data.is_valuation && data.property_details) {
-                this.showValuationWithData(data.property_details);
+            if (data.is_price_prediction && data.property_details) {
+                // Extract actual price from response text
+                const priceMatch = data.response.match(/₹([\d,.]+)\s*(?:lakhs?|crores?)/i);
+                let actualPrice = 185; // Default
+                if (priceMatch) {
+                    const priceText = priceMatch[1].replace(/,/g, '');
+                    actualPrice = parseFloat(priceText);
+                    // If it's in crores, convert to lakhs
+                    if (data.response.toLowerCase().includes('crore')) {
+                        actualPrice *= 100;
+                    }
+                }
+                
+                this.showValuationWithData(data.property_details, actualPrice, data.response);
+            }
+            
+            // Show recommendations if available
+            if (data.is_recommendation && data.recommendations && data.recommendations.length > 0) {
+                this.showRecommendationsView(data.recommendations, data.total_recommendations);
             }
             
         } catch (error) {
@@ -345,8 +372,14 @@ class RealyticsAI {
             await this.delay(30); // Adjust speed of streaming
         }
         
-        // Remove streaming indicator
+        // Remove streaming indicator and apply formatting
         streamingText.classList.remove('streaming-text');
+        
+        // Apply formatting to the complete message
+        const messageTextDiv = messageDiv.querySelector('.message-text');
+        if (messageTextDiv) {
+            messageTextDiv.innerHTML = this.formatMessage(content);
+        }
         
         // Attach action button listeners if they exist
         if (actionsHtml) {
@@ -398,14 +431,18 @@ class RealyticsAI {
         const welcomeContainer = document.getElementById('welcomeContainer');
         
         if (this.isFirstTimeUser) {
-            // First-time user welcome
+            // First-time user welcome - enhanced branding
             welcomeContainer.innerHTML = `
                 <div class="welcome-first-time">
                     <div class="welcome-logo">
-                        <i class="ph ph-house-line"></i>
+                        <span class="welcome-logo-r">r</span><span class="welcome-logo-ai">AI</span>
                     </div>
-                    <h1 class="welcome-main-title">RealyticsAI: Property Intelligence Suite</h1>
-                    <p class="welcome-tagline">Transforming real estate decisions with AI-powered insights and intelligent market analysis</p>
+                    <h1 class="welcome-main-title">
+                        <span class="welcome-brand">r<span class="brand-ai">AI</span></span> 
+                        <span class="welcome-subtitle">RealyticsAI</span>
+                    </h1>
+                    <p class="welcome-tagline">Property Intelligence Suite</p>
+                    <p class="welcome-description">Transforming real estate decisions with AI-powered insights and intelligent market analysis</p>
                     <div class="welcome-instruction">
                         <i class="ph ph-sparkle"></i>
                         <span>Ask a question or click the <strong>+</strong> button to explore features</span>
@@ -424,7 +461,7 @@ class RealyticsAI {
         }
     }
     
-    showValuationWithData(propertyData) {
+    showValuationWithData(propertyData, actualPrice = 185, responseText = '') {
         // Use actual data from API if available
         const features = propertyData || {
             location: 'Whitefield',
@@ -434,11 +471,15 @@ class RealyticsAI {
             balcony: 2
         };
         
+        // Calculate local average (slightly lower than prediction)
+        const localAverage = Math.round(actualPrice * 0.85);
+        const priceRange = [Math.round(actualPrice * 0.9), Math.round(actualPrice * 1.1)];
+        
         const valuationData = {
-            price: 185,
-            priceRange: [175, 195],
-            localAverage: 165,
-            prediction: 185,
+            price: actualPrice,
+            priceRange: priceRange,
+            localAverage: localAverage,
+            prediction: actualPrice,
             features: {
                 'Location': features.location || 'Not specified',
                 'Size': `${features.sqft || 1500} sq.ft`,
@@ -446,7 +487,7 @@ class RealyticsAI {
                 'Bathrooms': features.bath || 2,
                 'Balconies': features.balcony || 1
             },
-            confidence: 92.5
+            responseText: responseText
         };
         
         this.displayValuationCard(valuationData);
@@ -479,7 +520,7 @@ class RealyticsAI {
             <div class="valuation-card">
                 <div class="valuation-hero">
                     <div class="valuation-label">Estimated Value</div>
-                    <div class="valuation-price">₹${valuationData.price / 100} Cr</div>
+                    <div class="valuation-price">₹${valuationData.price.toFixed(2)} Lakhs</div>
                     <div class="valuation-range">Range: ₹${valuationData.priceRange[0]} - ${valuationData.priceRange[1]} Lakhs</div>
                 </div>
                 
@@ -500,12 +541,6 @@ class RealyticsAI {
                     `).join('')}
                 </div>
                 
-                <div class="confidence-footer">
-                    <div class="confidence-text">
-                        💡 Model Confidence: Typically accurate within 
-                        <span class="confidence-value">${valuationData.confidence}%</span>
-                    </div>
-                </div>
             </div>
         `;
         
@@ -514,6 +549,11 @@ class RealyticsAI {
         
         // Show right sidebar
         this.rightSidebar.classList.remove('hidden');
+        // Enable side-by-side view
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) {
+            chatContainer.classList.add('sidebar-open');
+        }
     }
     
     createValuationChart(data) {
@@ -567,7 +607,7 @@ class RealyticsAI {
                         ticks: {
                             color: '#888888',
                             callback: function(value) {
-                                return '₹' + value + 'L';
+                                return '₹' + value.toFixed(1) + 'L';
                             }
                         }
                     },
@@ -610,6 +650,98 @@ class RealyticsAI {
         `;
         
         this.rightSidebar.classList.remove('hidden');
+    }
+    
+    showRecommendationsView(recommendations, totalCount) {
+        const rightSidebarContent = document.getElementById('rightSidebarContent');
+        
+        // Generate realistic property images
+        const getPropertyImage = (index, prop) => {
+            const images = [
+                'https://images.unsplash.com/photo-1560184897-ae75f418493e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Modern living room
+                'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Bedroom
+                'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Kitchen
+                'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Modern apartment
+                'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Living room interior
+                'https://images.unsplash.com/photo-1567767292278-a4f21aa2d36e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Modern hall
+                'https://images.unsplash.com/photo-1571055107559-3e67626fa8be?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80', // Bedroom interior
+                'https://images.unsplash.com/photo-1586105251261-72a756497a11?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'  // Apartment view
+            ];
+            return images[index % images.length];
+        };
+        
+        rightSidebarContent.innerHTML = `
+            <div class="discovery-container">
+                <div class="recommendations-header">
+                    <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-xs);">Recommended Properties</h3>
+                    <p style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-bottom: var(--spacing-lg);">
+                        Showing ${recommendations.length} of ${totalCount} matches
+                    </p>
+                </div>
+                
+                ${recommendations.map((prop, index) => `
+                    <div class="property-card" style="animation: slideIn 0.3s ease ${index * 0.1}s backwards;">
+                        <div class="property-image-container">
+                            <img src="${getPropertyImage(index, prop)}" alt="Property Image" class="property-image" 
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"/>
+                            <div class="property-image-fallback" style="display: none; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                <i class="ph ph-house-line" style="font-size: 48px; color: white; opacity: 0.6;"></i>
+                            </div>
+                            ${prop.similarity_score ? `
+                                <div class="property-badge match-badge">
+                                    ${Math.round(prop.similarity_score * 100)}% Match
+                                </div>
+                            ` : '<div class="property-badge">Featured</div>'}
+                        </div>
+                        <div class="property-info">
+                            <div class="property-title">${prop.bhk || 3} BHK ${prop.property_type || 'Apartment'}</div>
+                            <div class="property-location">
+                                <i class="ph ph-map-pin"></i>
+                                ${prop.location || prop.area_type || 'Prime Location'}
+                            </div>
+                            <div class="property-details-grid">
+                                <div class="detail-item">
+                                    <i class="ph ph-ruler"></i>
+                                    <span>${prop.sqft || prop.total_sqft || 1500} sqft</span>
+                                </div>
+                                ${prop.bath ? `
+                                    <div class="detail-item">
+                                        <i class="ph ph-shower"></i>
+                                        <span>${prop.bath} Bath</span>
+                                    </div>
+                                ` : ''}
+                                ${prop.balcony ? `
+                                    <div class="detail-item">
+                                        <i class="ph ph-sun"></i>
+                                        <span>${prop.balcony} Balcony</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div class="property-price-row">
+                                <div class="property-price">₹${prop.price.toFixed(1)} L</div>
+                                ${prop.price_per_sqft ? `
+                                    <div class="price-per-sqft">₹${this.formatNumber(prop.price_per_sqft)}/sqft</div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+                
+                ${totalCount > recommendations.length ? `
+                    <div class="more-properties-hint">
+                        <i class="ph ph-arrow-down"></i>
+                        <span>${totalCount - recommendations.length} more properties available</span>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        
+        this.rightSidebar.classList.remove('hidden');
+        // Enable side-by-side view
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) {
+            chatContainer.classList.add('sidebar-open');
+        }
     }
     
     showNegotiationView() {
@@ -718,13 +850,18 @@ class RealyticsAI {
         // Clear messages
         this.chatMessages.innerHTML = '';
         
-        // Reset and show appropriate welcome
-        this.initializeWelcomeScreen();
-        const welcomeContainer = document.getElementById('welcomeContainer');
-        if (welcomeContainer) {
-            welcomeContainer.style.display = 'flex';
-            this.chatMessages.appendChild(welcomeContainer);
-        }
+        // Always show returning user welcome for new chats
+        const welcomeContainer = document.createElement('div');
+        welcomeContainer.className = 'welcome-container';
+        welcomeContainer.id = 'welcomeContainer';
+        welcomeContainer.innerHTML = `
+            <div class="welcome-simple">
+                <p class="welcome-simple-text">How can I help you today?</p>
+            </div>
+        `;
+        
+        welcomeContainer.style.display = 'flex';
+        this.chatMessages.appendChild(welcomeContainer);
         
         // Reset message history
         this.messageHistory = [];
@@ -736,8 +873,15 @@ class RealyticsAI {
         this.messageInput.value = '';
         this.handleInputChange();
         
+        // Reset input placeholder
+        this.messageInput.placeholder = 'Ask about a property, or select a feature...';
+        
         // Hide right sidebar and destroy chart if exists
         this.rightSidebar.classList.add('hidden');
+        const chatContainer = document.querySelector('.chat-container');
+        if (chatContainer) {
+            chatContainer.classList.remove('sidebar-open');
+        }
         if (this.currentChart) {
             this.currentChart.destroy();
             this.currentChart = null;
@@ -793,6 +937,58 @@ class RealyticsAI {
 
     scrollToBottom() {
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+    }
+    
+    formatPrice(price) {
+        if (!price) return 'N/A';
+        
+        // Convert to number if string
+        const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+        
+        if (numPrice >= 10000000) {
+            // Crores (10 million+)
+            return (numPrice / 10000000).toFixed(2) + ' Cr';
+        } else if (numPrice >= 100000) {
+            // Lakhs (100k+)
+            return (numPrice / 100000).toFixed(2) + ' L';
+        } else {
+            return numPrice.toLocaleString('en-IN');
+        }
+    }
+    
+    formatNumber(num) {
+        if (!num) return 'N/A';
+        const numValue = typeof num === 'string' ? parseFloat(num) : num;
+        return numValue.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    }
+    
+    formatMessage(text) {
+        if (!text) return '';
+        
+        try {
+            // Configure marked for better formatting
+            if (typeof marked !== 'undefined') {
+                marked.setOptions({
+                    breaks: true,
+                    gfm: true
+                });
+                
+                // Convert markdown to HTML and sanitize
+                const html = marked.parse(text);
+                return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(html) : html;
+            }
+        } catch (error) {
+            console.warn('Markdown parsing failed, using plain text formatting:', error);
+        }
+        
+        // Fallback: Basic text formatting
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+            .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
+            .replace(/\n/g, '<br>') // Line breaks
+            .replace(/• /g, '<span style="color: var(--accent-primary);">•</span> ') // Bullet points
+            .replace(/(₹[\d,]+(?:\.\d+)?(?:\s*(?:Cr|Crore|L|Lakh|K))?)/g, 
+                    '<span style="color: var(--accent-primary); font-weight: 600;">$1</span>'); // Price highlighting
     }
 }
 

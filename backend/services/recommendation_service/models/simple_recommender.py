@@ -25,6 +25,9 @@ class SimpleContentRecommender:
         self.df = df.reset_index(drop=True)
         logger.info(f"Initializing SimpleContentRecommender with {len(df)} properties")
         
+        self.df['location_normalized'] = self.df['location'].str.lower().str.strip()
+        logger.info("Created normalized location column for filtering.")
+
         # Create TF-IDF vectorizer
         self.vectorizer = TfidfVectorizer(
             min_df=1, 
@@ -118,10 +121,13 @@ class SimpleContentRecommender:
         filtered_df = self.df.copy()
         
         if "location" in filters and filters["location"]:
-            mask = filtered_df["location"].str.contains(
-                filters["location"], case=False, na=False
-            )
+            # 1. Normalize the user's input
+            user_location_normalized = filters["location"].lower().strip()
+            
+            # 2. Filter on the pre-normalized column
+            mask = filtered_df["location_normalized"] == user_location_normalized
             filtered_df = filtered_df[mask]
+            logger.info(f"After location filter: {len(filtered_df)} properties")
         
         if "bhk" in filters and filters["bhk"]:
             mask = filtered_df["size"].str.contains(
