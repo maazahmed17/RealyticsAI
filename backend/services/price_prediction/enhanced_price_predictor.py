@@ -79,8 +79,8 @@ class EnhancedPricePredictionService:
         self.scaler = StandardScaler()
         self.feature_columns = None
         self.data = None
-        self.model_path = Path("/home/maaz/RealyticsAI/data/models")
-        self.data_path = Path("/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv")
+        self.model_path = Path("/home/maaz/RealyticsAI_Dev/data/models")
+        self.data_path = Path("/home/maaz/RealyticsAI_Dev/data/bengaluru_house_prices.csv")
         
         # Initialize service
         self._initialize_service()
@@ -156,7 +156,30 @@ class EnhancedPricePredictionService:
     def _load_existing_model(self) -> bool:
         """Try to load an existing trained model"""
         try:
-            # Try enhanced model first
+            # Try XGBoost fixed models first (latest models)
+            fixed_models = list(self.model_path.glob("xgboost_fixed_*.pkl"))
+            if fixed_models:
+                model_file = max(fixed_models, key=os.path.getctime)
+                timestamp = model_file.name.replace("xgboost_fixed_", "").replace(".pkl", "")
+                
+                # Load model
+                self.xgb_model = joblib.load(model_file)
+                logger.info(f"Loaded XGBoost fixed model from {model_file}")
+                
+                # Load associated files with timestamp
+                scaler_file = self.model_path / f"scaler_{timestamp}.pkl"
+                if scaler_file.exists():
+                    self.scaler = joblib.load(scaler_file)
+                    logger.info(f"Loaded scaler from {scaler_file}")
+                
+                features_file = self.model_path / f"feature_columns_{timestamp}.pkl"
+                if features_file.exists():
+                    self.feature_columns = joblib.load(features_file)
+                    logger.info(f"Loaded feature columns from {features_file}")
+                
+                return True
+            
+            # Fall back to enhanced models if no fixed models
             enhanced_models = list(self.model_path.glob("enhanced_model*.pkl"))
             if enhanced_models:
                 model_file = max(enhanced_models, key=os.path.getctime)
@@ -175,7 +198,7 @@ class EnhancedPricePredictionService:
                 if features_file.exists():
                     self.feature_columns = joblib.load(features_file)
                 
-                logger.info(f"Loaded existing model from {model_file}")
+                logger.info(f"Loaded existing enhanced model from {model_file}")
                 return True
             
             return False
@@ -317,28 +340,46 @@ class EnhancedPricePredictionService:
             bath = features.get('bath', features.get('bathrooms', 2))
             balcony = features.get('balcony', features.get('balconies', 1))
             sqft = features.get('total_sqft', features.get('area', features.get('sqft', None)))
-            location = features.get('location', '')
             
             # Handle missing sqft - estimate based on BHK
             if not sqft:
                 sqft_estimates = {1: 650, 2: 1100, 3: 1650, 4: 2200, 5: 2800}
                 sqft = sqft_estimates.get(bhk, 1650)
             
-            # Prepare feature vector
+            # Prepare feature vector using the exact format expected by the model
             if self.xgb_model and self.feature_columns:
-                # Create feature dictionary
-                loc_enc = self.location_encoder.transform(location)
+                # Load location encoding data
+                location = features.get('location', 'Bangalore')
+                if self.data is not None:
+                    # Handle different column names in the dataset
+                    location_col = 'Location' if 'Location' in self.data.columns else 'location'
+                    price_col = 'Price' if 'Price' in self.data.columns else 'price'
+                    
+                    location_counts = self.data[location_col].value_counts()
+                    location_prices = self.data.groupby(location_col)[price_col].mean()
+                    global_mean = self.data[price_col].mean()
+                    
+                    loc_freq = location_counts.get(location, 10)
+                    loc_price = location_prices.get(location, global_mean)
+                else:
+                    loc_freq = 10
+                    loc_price = 200
                 
+                # Map to the expected column names (based on new training format)
                 feature_dict = {
-                    'bath': bath,
-                    'balcony': balcony,
-                    'bhk': bhk,
-                    'total_sqft': sqft,
-                    'location_encoded': loc_enc['location_encoded'],
-                    'location_tier': loc_enc['location_tier'],
-                    'price_per_sqft': sqft / bhk if bhk > 0 else sqft,
-                    'bath_per_bhk': bath / max(bhk, 1),
-                    'sqft_per_bhk': sqft / max(bhk, 1)
+                    'BHK': bhk,
+                    'TotalSqft': sqft,
+                    'Bath': bath,
+                    'Balcony': balcony,
+                    'PropertyAgeYears': features.get('property_age', 5),
+                    'FloorNumber': features.get('floor_number', 2),
+                    'TotalFloors': features.get('total_floors', 4),
+                    'Parking': features.get('parking', 1),
+                    'LocationFrequency': loc_freq,
+                    'LocationPriceEncoding': loc_price,
+                    'SqftPerBHK': sqft / bhk,
+                    'BathPerBHK': bath / bhk,
+                    'TotalRooms': bhk + bath
                 }
                 
                 # Create DataFrame with correct columns
@@ -350,9 +391,20 @@ class EnhancedPricePredictionService:
                 # Make prediction
                 predicted_price = float(self.xgb_model.predict(X_scaled)[0])
                 
-                # Get feature importance for explanation
-                feature_importance = dict(zip(self.feature_columns, self.xgb_model.feature_importances_))
-                top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:3]
+                # Get feature importance for explanation (handle both Pipeline and direct model)
+                try:
+                    if hasattr(self.xgb_model, 'feature_importances_'):
+                        feature_importance = dict(zip(self.feature_columns, self.xgb_model.feature_importances_))
+                    elif hasattr(self.xgb_model, 'named_steps') and hasattr(self.xgb_model.named_steps.get('model', None), 'feature_importances_'):
+                        # Pipeline case
+                        feature_importance = dict(zip(self.feature_columns, self.xgb_model.named_steps['model'].feature_importances_))
+                    else:
+                        # Fallback - create dummy importance
+                        feature_importance = {col: 1.0/len(self.feature_columns) for col in self.feature_columns}
+                    top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:3]
+                except Exception as e:
+                    logger.warning(f"Could not extract feature importance: {e}")
+                    top_features = [('BHK', 0.3), ('TotalSqft', 0.3), ('Location', 0.2)]
                 
             else:
                 # Fallback to data-based estimation

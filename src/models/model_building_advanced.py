@@ -28,6 +28,7 @@ from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import cross_val_score
 import xgboost as xgb
+from xgboost import callback
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 
@@ -69,7 +70,8 @@ class XGBoostStrategy(ModelBuildingStrategy):
             'min_child_weight': kwargs.get('min_child_weight', 3),
             'random_state': kwargs.get('random_state', 42),
             'objective': 'reg:squarederror',
-            'n_jobs': -1
+            'n_jobs': -1,
+            'eval_metric': 'rmse'  # Added eval_metric for early stopping
         }
     
     def build_and_train_model(self, X_train: pd.DataFrame, y_train: pd.Series,
@@ -92,11 +94,12 @@ class XGBoostStrategy(ModelBuildingStrategy):
             X_train_scaled = scaler.fit_transform(X_train)
             X_val_scaled = scaler.transform(X_val)
             
-            # Fit with early stopping
+            # Fit with early stopping using callbacks
+            eval_set = [(X_val_scaled, y_val)]
             model.fit(
                 X_train_scaled, y_train,
-                eval_set=[(X_val_scaled, y_val)],
-                early_stopping_rounds=50,
+                eval_set=eval_set,
+                callbacks=[xgb.callback.EarlyStopping(rounds=50)],
                 verbose=False
             )
             

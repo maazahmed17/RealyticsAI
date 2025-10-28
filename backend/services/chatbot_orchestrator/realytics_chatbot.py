@@ -259,83 +259,16 @@ This prediction is based on {result['features_used']} features and uses our late
             
             Be specific and helpful. Use data about Bangalore real estate.
             """
-                
-                return self.gemini_chatbot.gemini_service.generate_response(prompt)
-            else:
-                # General market response without data
-                return self.gemini_chatbot.process_message(
-                    message,
-                    {"context": "market_analysis", "market": "Bengaluru"}
-                )
+            
+            return self.gemini_chatbot.gemini_service.generate_response(prompt)
                 
         except Exception as e:
             logger.error(f"Market analysis error: {e}")
             return "I apologize, but I couldn't retrieve market analysis at this time."
     
     def _handle_property_search(self, message: str) -> str:
-        # backend/services/chatbot_orchestrator/realytics_chatbot.py
-
-# ... inside the RealyticsAIChatbot class ...
-
-    def _handle_property_search(self, message: str) -> str:
-        """Handle property search/recommendation queries by calling the recommendation API."""
-        
-        # Step 1: Extract user preferences from the message.
-        # We reuse the feature extractor from the price predictor.
-        if not self.price_predictor:
-            return "I apologize, but the recommendation service is currently unavailable."
-
-        try:
-            # Extract features like BHK, bath, and budget (as price).
-            features = self.price_predictor._extract_features_from_query(message)
-            if not features:
-                return "I can help you find properties! Please tell me what you're looking for, for example: 'Find me a 3 BHK with 2 bathrooms under 1.5 crores.'"
-
-            # Step 2: Prepare the request for the recommendation API.
-            # The API expects 'bhk', 'bath', and 'price' (as budget).
-            api_payload = {
-                "bhk": features.get("bhk"),
-                "bath": features.get("bath"),
-                "price": features.get("price") or features.get("budget") # Use price or budget if available
-            }
-
-            # Ensure we have the minimum required fields for a recommendation.
-            if not all([api_payload["bhk"], api_payload["bath"], api_payload["price"]]):
-                return "To give you good recommendations, I need at least the number of bedrooms (BHK), bathrooms, and your budget. For example: 'Recommend a 2 BHK with 2 baths for 80 lakhs.'"
-
-            # Step 3: Call the recommendation API endpoint.
-            api_url = "http://localhost:8000/api/v1/recommend" # Assumes the main app runs on port 8000
-            response = requests.post(api_url, json=api_payload)
-            response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
-            
-            recommendations = response.json()
-
-            # Step 4: Format the API response into a user-friendly message.
-            if not recommendations:
-                return "I couldn't find any properties that match your criteria. You might want to try adjusting your budget or preferences."
-
-            response_str = "Here are a few properties you might like:\n\n"
-            for prop in recommendations:
-                # Safely get property details with defaults
-                size = prop.get('size', 'N/A')
-                location = prop.get('location', 'N/A')
-                price = prop.get('price', 0)
-                bath = prop.get('bath', 'N/A')
-                
-                response_str += f"• **{size}** in **{location}**\n"
-                response_str += f"  - Price: **₹{price:.2f} Lakhs**, Bathrooms: {bath}\n\n"
-            
-            response_str += "Would you like me to refine these recommendations or get a detailed price estimate for one of them?"
-            return response_str
-
-        except requests.exceptions.RequestException as e:
-            # Handle cases where the API is down or there's a network issue
-            print(f"API call failed: {e}") # Log the error for debugging
-            return "I'm having trouble connecting to the recommendation service right now. Please try again in a moment."
-        except Exception as e:
-            print(f"An error occurred in property search: {e}") # Log the error
-            return "I encountered an unexpected error while searching for properties. Please try rephrasing your request."
-    #  return response
+        """Handle property search/recommendation queries"""
+        return "Property search and recommendations are coming soon! For now, I can help you with price predictions and market analysis."
     
     def _handle_negotiation(self, message: str) -> str:
         """Handle negotiation assistance queries"""

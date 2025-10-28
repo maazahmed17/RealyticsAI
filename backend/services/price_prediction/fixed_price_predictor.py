@@ -29,7 +29,7 @@ class FixedPricePredictionService:
         self.scaler = None
         self.feature_columns = None
         self.feature_engineer = AdvancedFeatureEngineer()
-        self.model_dir = Path("/home/maaz/RealyticsAI/data/models")
+        self.model_dir = Path("/home/maaz/RealyticsAI_Dev/data/models")
         
         # Load the fixed model
         self._load_fixed_model()
@@ -88,62 +88,56 @@ class FixedPricePredictionService:
             }
         
         try:
-            # Create DataFrame from input
-            df = pd.DataFrame([property_data])
+            # Extract basic features
+            bhk = property_data.get('bhk', property_data.get('bedrooms', 3))
+            bath = property_data.get('bath', property_data.get('bathrooms', 2))
+            balcony = property_data.get('balcony', property_data.get('balconies', 1))
+            sqft = property_data.get('total_sqft', property_data.get('area', property_data.get('sqft', None)))
             
-            # Normalize column names
-            df.columns = df.columns.str.lower()
+            # Handle missing sqft - estimate based on BHK
+            if not sqft:
+                sqft_estimates = {1: 650, 2: 1100, 3: 1650, 4: 2200, 5: 2800}
+                sqft = sqft_estimates.get(bhk, 1650)
             
-            # Map column names if needed
-            column_mapping = {
-                'totalsqft': 'total_sqft',
-                'size': 'bhk'
-            }
-            for old_col, new_col in column_mapping.items():
-                if old_col in df.columns and new_col not in df.columns:
-                    df[new_col] = df[old_col]
-            
-            # Extract BHK from size if needed
-            if 'size' in df.columns and 'bhk' not in df.columns:
-                df['bhk'] = df['size'].str.extract('(\d+)').astype(float)
-            
-            # Load reference data for statistical feature calculation
-            data_path = Path("/home/maaz/RealyticsAI/data/raw/bengaluru_house_prices.csv")
+            # Load reference data for location encoding
+            data_path = Path("/home/maaz/RealyticsAI_Dev/data/bengaluru_house_prices.csv")
             if data_path.exists():
-                # Load a small sample of reference data for statistics
-                import warnings
-                warnings.filterwarnings('ignore')
-                ref_data = pd.read_csv(data_path, nrows=1000)  # Load first 1000 rows
-                ref_data.columns = ref_data.columns.str.lower()
+                ref_data = pd.read_csv(data_path)
+                # Map location to frequency and price encoding
+                location_counts = ref_data['Location'].value_counts()
+                location_prices = ref_data.groupby('Location')['Price'].mean()
+                global_mean = ref_data['Price'].mean()
                 
-                # Append the input to reference data
-                combined_df = pd.concat([ref_data, df], ignore_index=True)
+                location = property_data.get('location', 'Bangalore')
+                loc_freq = location_counts.get(location, 10)  # Default frequency
+                loc_price = location_prices.get(location, global_mean)  # Default price encoding
             else:
-                combined_df = df
+                loc_freq = 10
+                loc_price = 200  # Default price encoding
             
-            # Apply feature engineering (NO DATA LEAKAGE)
-            df_engineered = self.feature_engineer.transform(
-                combined_df,
-                use_polynomial=False,
-                use_interactions=True,
-                use_binning=True,
-                use_statistical=True  # Enable for proper features
-            )
+            # Create feature dictionary matching new training format
+            feature_dict = {
+                'BHK': bhk,
+                'TotalSqft': sqft,
+                'Bath': bath,
+                'Balcony': balcony,
+                'PropertyAgeYears': property_data.get('property_age', 5),
+                'FloorNumber': property_data.get('floor_number', 2),
+                'TotalFloors': property_data.get('total_floors', 4),
+                'Parking': property_data.get('parking', 1),
+                'LocationFrequency': loc_freq,
+                'LocationPriceEncoding': loc_price,
+                'SqftPerBHK': sqft / bhk,
+                'BathPerBHK': bath / bhk,
+                'TotalRooms': bhk + bath
+            }
             
-            # Get only the last row (our input)
-            df_engineered = df_engineered.tail(1)
-            
-            # Select only numeric features
-            feature_cols = [col for col in df_engineered.columns if col != 'price']
-            numeric_features = df_engineered[feature_cols].select_dtypes(include=[np.number]).columns.tolist()
-            X = df_engineered[numeric_features]
-            
-            # Handle missing values
-            X = X.fillna(X.median() if len(X) > 1 else 0)
+            # Create DataFrame
+            X = pd.DataFrame([feature_dict])
             
             # Align with training features
             if self.feature_columns:
-                # Use only common features
+                # Use only the features that exist in both
                 common_features = [f for f in self.feature_columns if f in X.columns]
                 X = X[common_features]
             

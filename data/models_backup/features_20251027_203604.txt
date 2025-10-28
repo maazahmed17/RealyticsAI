@@ -1,0 +1,8 @@
+TotalSqft
+BHK
+Bath
+Balcony
+Parking
+TotalFloors
+FloorNumber
+PropertyAgeYears

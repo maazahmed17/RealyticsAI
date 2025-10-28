@@ -36,12 +36,15 @@ from rich import print as rprint
 
 # Import custom modules
 from models.feature_engineering_advanced import AdvancedFeatureEngineer
-from models.model_building_advanced import (
-    ModelBuilder, XGBoostStrategy, LightGBMStrategy, 
-    EnhancedRandomForestStrategy, GradientBoostingStrategy,
-    EnsembleStrategy, compare_models
-)
-from models.hyperparameter_tuning import HyperparameterTuner, quick_tune
+# from models.model_building_advanced import (
+#     ModelBuilder, XGBoostStrategy, LightGBMStrategy, 
+#     EnhancedRandomForestStrategy, GradientBoostingStrategy,
+#     EnsembleStrategy, compare_models
+# )
+from models.xgboost_strategy import XGBoostStrategy
+
+from models.column_definitions import COLUMNS, NUMERIC_COLUMNS, CATEGORICAL_COLUMNS, TEXT_COLUMNS, TARGET_COLUMN
+# from models.hyperparameter_tuning import HyperparameterTuner, quick_tune
 
 warnings.filterwarnings('ignore')
 console = Console()
@@ -64,6 +67,13 @@ class EnhancedPricePredictionTrainer:
         self.feature_engineer = AdvancedFeatureEngineer()
         self.results = {}
         
+        # Configure expected columns
+        self.expected_columns = {
+            'PropertyID', 'Location', 'BHK', 'TotalSqft', 'Bath',
+            'Balcony', 'Price', 'PropertyAgeYears', 'FloorNumber',
+            'TotalFloors', 'Parking', 'FurnishingStatus', 'Amenities'
+        }
+        
         # MLflow setup
         mlflow.set_tracking_uri("file:///home/maaz/.config/zenml/local_stores/05c97d8d-483a-4829-8d7a-797c176c6f95/mlruns")
         mlflow.set_experiment("enhanced_price_prediction")
@@ -78,6 +88,15 @@ class EnhancedPricePredictionTrainer:
             self.data = pd.read_csv(self.data_path)
             console.print(f"[green]✅ Loaded {len(self.data):,} properties[/green]")
             console.print(f"[cyan]📊 Original shape: {self.data.shape}[/cyan]")
+            
+            # Verify columns
+            missing_cols = self.expected_columns - set(self.data.columns)
+            if missing_cols:
+                console.print(f"[red]❌ Missing columns: {missing_cols}[/red]")
+                return False
+                
+            # Ensure proper data types
+            self.data[NUMERIC_COLUMNS] = self.data[NUMERIC_COLUMNS].apply(pd.to_numeric, errors='coerce')
             
             # Basic cleaning
             self._clean_data()
@@ -95,8 +114,8 @@ class EnhancedPricePredictionTrainer:
         """Basic data cleaning"""
         console.print("\n[yellow]🧹 Cleaning data...[/yellow]")
         
-        # Handle 'total_sqft' column if it exists and contains ranges
-        if 'total_sqft' in self.data.columns:
+        # Handle 'TotalSqft' column if it exists and contains ranges
+        if 'TotalSqft' in self.data.columns:
             def convert_sqft(x):
                 try:
                     if '-' in str(x):
@@ -106,14 +125,15 @@ class EnhancedPricePredictionTrainer:
                 except:
                     return np.nan
             
-            self.data['total_sqft'] = self.data['total_sqft'].apply(convert_sqft)
+            self.data['TotalSqft'] = self.data['TotalSqft'].apply(convert_sqft)
         
-        # Handle 'size' column to extract BHK
-        if 'size' in self.data.columns and 'bhk' not in self.data.columns:
-            self.data['bhk'] = self.data['size'].str.extract('(\d+)').astype(float)
+        # Ensure numeric columns are properly typed
+        for col in NUMERIC_COLUMNS:
+            if col in self.data.columns:
+                self.data[col] = pd.to_numeric(self.data[col], errors='coerce')
         
         # Drop rows with critical missing values
-        critical_cols = ['price', 'total_sqft']
+        critical_cols = [TARGET_COLUMN, 'TotalSqft']
         for col in critical_cols:
             if col in self.data.columns:
                 self.data = self.data.dropna(subset=[col])
@@ -142,9 +162,9 @@ class EnhancedPricePredictionTrainer:
         table.add_row("Numeric Features", str(len(self.data.select_dtypes(include=[np.number]).columns)))
         table.add_row("Categorical Features", str(len(self.data.select_dtypes(include=['object']).columns)))
         
-        if 'price' in self.data.columns:
-            table.add_row("Avg Price", f"₹{self.data['price'].mean():.2f} Lakhs")
-            table.add_row("Price Range", f"₹{self.data['price'].min():.1f} - {self.data['price'].max():.1f} Lakhs")
+        if 'Price' in self.data.columns:
+            table.add_row("Avg Price", f"₹{self.data['Price'].mean():.2f} Lakhs")
+            table.add_row("Price Range", f"₹{self.data['Price'].min():.1f} - {self.data['Price'].max():.1f} Lakhs")
         
         console.print(table)
     
@@ -152,10 +172,10 @@ class EnhancedPricePredictionTrainer:
         """Apply advanced feature engineering"""
         console.print("\n[bold cyan]🔧 Feature Engineering[/bold cyan]")
         console.print("=" * 70)
-        
+
         # Apply comprehensive feature engineering
         console.print("[yellow]Creating advanced features...[/yellow]")
-        
+
         self.data_engineered = self.feature_engineer.transform(
             self.data,
             use_polynomial=True,
@@ -164,41 +184,51 @@ class EnhancedPricePredictionTrainer:
             use_statistical=True,
             polynomial_degree=2
         )
-        
+
         console.print(f"[green]✅ Features created. Total features: {len(self.data_engineered.columns)}[/green]")
-        
+
         # Prepare features and target
-        feature_cols = [col for col in self.data_engineered.columns if col != 'price']
+        feature_cols = [col for col in self.data_engineered.columns if col != 'Price']
         numeric_features = self.data_engineered[feature_cols].select_dtypes(include=[np.number]).columns.tolist()
-        
+
         X = self.data_engineered[numeric_features]
-        y = self.data_engineered['price']
-        
+        y = self.data_engineered['Price']
+
         # Handle missing values
         X = X.fillna(X.median())
-        
+
         # Remove features with zero variance
         from sklearn.feature_selection import VarianceThreshold
         selector = VarianceThreshold(threshold=0.01)
         X = pd.DataFrame(selector.fit_transform(X), columns=X.columns[selector.get_support()], index=X.index)
-        
+
         console.print(f"[cyan]📊 Final feature shape: {X.shape}[/cyan]")
-        
+
         # Split data with validation set for early stopping
         # First split: 80% train+val, 20% test
         X_temp, self.X_test, y_temp, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
-        
+
         # Second split: 75% train, 25% validation (of the 80%)
         self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(
             X_temp, y_temp, test_size=0.25, random_state=42
         )
-        
+
         console.print(f"[green]✅ Train: {self.X_train.shape}, Val: {self.X_val.shape}, Test: {self.X_test.shape}[/green]")
-        
+
         # Feature importance analysis
         self._analyze_feature_importance()
+
+        # Use ALL engineered features for modeling (to match chatbot pipeline)
+        self.selected_features = list(self.X_train.columns)
+        # No feature selection: use all features
+        # Update training, validation, and test sets with all features
+        # (This is a no-op, but keeps logic clear)
+        self.X_train = self.X_train[self.selected_features]
+        self.X_val = self.X_val[self.selected_features]
+        self.X_test = self.X_test[self.selected_features]
+        console.print(f"[green]✅ Using all {len(self.selected_features)} engineered features for modeling[/green]")
     
     def _analyze_feature_importance(self):
         """Analyze feature importance using mutual information"""
@@ -220,113 +250,44 @@ class EnhancedPricePredictionTrainer:
         
         console.print(table)
         
-        # Select top features for modeling
-        top_n = min(50, len(mi_scores))
-        self.selected_features = mi_scores.head(top_n).index.tolist()
-        
-        # Update training, validation, and test sets with selected features
-        self.X_train = self.X_train[self.selected_features]
-        self.X_val = self.X_val[self.selected_features]
-        self.X_test = self.X_test[self.selected_features]
-        
-        console.print(f"[green]✅ Selected top {len(self.selected_features)} features for modeling[/green]")
+    # Use ALL engineered features for modeling (to match chatbot pipeline)
+    # No feature selection: use all features
+    # Update training, validation, and test sets with all features
+    # (This is a no-op, but keeps logic clear)
     
     def train_models(self, use_tuning: bool = True):
-        """Train multiple models with optional hyperparameter tuning"""
+        """Train only XGBoost model"""
         console.print("\n[bold cyan]🤖 Model Training[/bold cyan]")
         console.print("=" * 70)
-        
-        models_to_train = [
-            ('XGBoost', XGBoostStrategy()),
-            ('LightGBM', LightGBMStrategy()),
-            ('Random Forest', EnhancedRandomForestStrategy()),
-            ('Gradient Boosting', GradientBoostingStrategy()),
-            ('Voting Ensemble', EnsembleStrategy(ensemble_type='voting')),
-            ('Stacking Ensemble', EnsembleStrategy(ensemble_type='stacking'))
-        ]
-        
-        results = []
-        
-        for model_name, strategy in track(models_to_train, description="Training models..."):
-            console.print(f"\n[yellow]Training {model_name}...[/yellow]")
-            
-            with mlflow.start_run(run_name=f"{model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
-                # Log parameters
-                mlflow.log_param("model_type", model_name)
-                mlflow.log_param("n_features", len(self.selected_features))
-                mlflow.log_param("train_size", len(self.X_train))
-                mlflow.log_param("val_size", len(self.X_val))
-                mlflow.log_param("test_size", len(self.X_test))
-                
-                # Build and train model WITH VALIDATION SET
-                builder = ModelBuilder(strategy)
-                
-                # Pass validation set to XGBoost for early stopping
-                if model_name == 'XGBoost':
-                    model = builder.build_model(self.X_train, self.y_train, 
-                                               X_val=self.X_val, y_val=self.y_val)
-                elif use_tuning and model_name in ['XGBoost', 'LightGBM', 'Random Forest']:
-                    # Use hyperparameter tuning for key models
-                    console.print(f"[cyan]🔍 Tuning hyperparameters for {model_name}...[/cyan]")
-                    tuner = HyperparameterTuner(scoring='r2', cv=5)
-                    
-                    model_type_map = {
-                        'XGBoost': 'xgboost',
-                        'LightGBM': 'lightgbm',
-                        'Random Forest': 'random_forest'
-                    }
-                    
-                    model, best_params = tuner.auto_tune(
-                        model_type_map[model_name],
-                        self.X_train, self.y_train,
-                        method='random'
-                    )
-                    
-                    # Log best parameters
-                    for param, value in best_params.items():
-                        mlflow.log_param(f"best_{param}", value)
-                else:
-                    model = builder.build_model(self.X_train, self.y_train)
-                
-                # Evaluate model
-                train_metrics = builder.evaluate_model(model, self.X_train, self.y_train)
-                test_metrics = builder.evaluate_model(model, self.X_test, self.y_test)
-                
-                # Log metrics
-                for metric_name, value in train_metrics.items():
-                    mlflow.log_metric(f"train_{metric_name}", value)
-                for metric_name, value in test_metrics.items():
-                    mlflow.log_metric(f"test_{metric_name}", value)
-                
-                # Log model
-                mlflow.sklearn.log_model(model, "model")
-                
-                # Store results
-                result = {
-                    'Model': model_name,
-                    'Train R²': train_metrics['r2'],
-                    'Test R²': test_metrics['r2'],
-                    'Train RMSE': train_metrics['rmse'],
-                    'Test RMSE': test_metrics['rmse'],
-                    'Train MAE': train_metrics['mae'],
-                    'Test MAE': test_metrics['mae'],
-                    'model': model
-                }
-                results.append(result)
-                
-                console.print(f"[green]✅ {model_name} - Test R²: {test_metrics['r2']:.4f}, RMSE: {test_metrics['rmse']:.2f}[/green]")
-        
-        # Convert results to DataFrame
-        self.results = pd.DataFrame(results)
-        
-        # Find best model
-        best_idx = self.results['Test R²'].idxmax()
-        self.best_model = self.results.loc[best_idx, 'model']
-        best_model_name = self.results.loc[best_idx, 'Model']
-        
-        console.print(f"\n[bold green]🏆 Best Model: {best_model_name}[/bold green]")
-        
-        # Display results table
+        console.print("\n[yellow]Training XGBoost model...[/yellow]")
+        strategy = XGBoostStrategy()
+        model = strategy.build_and_train_model(self.X_train, self.y_train, self.X_val, self.y_val)
+        # Evaluate model
+        train_preds = model.predict(self.X_train)
+        test_preds = model.predict(self.X_test)
+        from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+        train_metrics = {
+            'r2': r2_score(self.y_train, train_preds),
+            'rmse': np.sqrt(mean_squared_error(self.y_train, train_preds)),
+            'mae': mean_absolute_error(self.y_train, train_preds)
+        }
+        test_metrics = {
+            'r2': r2_score(self.y_test, test_preds),
+            'rmse': np.sqrt(mean_squared_error(self.y_test, test_preds)),
+            'mae': mean_absolute_error(self.y_test, test_preds)
+        }
+        self.results = pd.DataFrame([{
+            'Model': 'XGBoost',
+            'Train R²': train_metrics['r2'],
+            'Test R²': test_metrics['r2'],
+            'Train RMSE': train_metrics['rmse'],
+            'Test RMSE': test_metrics['rmse'],
+            'Train MAE': train_metrics['mae'],
+            'Test MAE': test_metrics['mae'],
+            'model': model
+        }])
+        self.best_model = model
+        console.print(f"[green]✅ XGBoost - Test R²: {test_metrics['r2']:.4f}, RMSE: {test_metrics['rmse']:.2f}[/green]")
         self._display_results()
     
     def _display_results(self):
@@ -374,32 +335,40 @@ compared to only 19.36% with the original model.""",
         console.print(panel)
     
     def save_best_model(self):
-        """Save the best model to disk"""
+        """Save the best model and features to disk in backend-compatible format"""
         console.print("\n[bold cyan]💾 Saving Best Model[/bold cyan]")
         console.print("=" * 70)
-        
-        # Create models directory
-        models_dir = Path(__file__).parent.parent.parent.parent / "data" / "models"
-        models_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Save model
-        model_path = models_dir / f"enhanced_model_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+        # Use MODEL_DIR from config.settings for saving artifacts
+
+        # Robust import of MODEL_DIR regardless of working directory
+        import importlib.util
+        import sys as _sys
+        from pathlib import Path as _Path
+        settings_path = _Path(__file__).resolve().parent.parent / "config" / "settings.py"
+        spec = importlib.util.spec_from_file_location("config.settings", str(settings_path))
+        settings = importlib.util.module_from_spec(spec)
+        _sys.modules[spec.name] = settings
+        spec.loader.exec_module(settings)
+        MODEL_DIR = settings.MODEL_DIR
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        # Save model with XGBoost-compatible filename
+        model_path = MODEL_DIR / f"xgboost_fixed_{timestamp}.pkl"
         joblib.dump(self.best_model, model_path)
-        
-        # Save feature list
-        feature_path = models_dir / f"features_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        with open(feature_path, 'w') as f:
-            for feature in self.selected_features:
-                f.write(f"{feature}\n")
-        
+
+        # Save feature columns as .pkl (list of feature names)
+        feature_columns_path = MODEL_DIR / f"feature_columns_{timestamp}.pkl"
+        joblib.dump(self.selected_features, feature_columns_path)
+
         # Save scaler if needed
         scaler = RobustScaler()
         scaler.fit(self.X_train)
-        scaler_path = models_dir / f"scaler_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+        scaler_path = MODEL_DIR / f"scaler_{timestamp}.pkl"
         joblib.dump(scaler, scaler_path)
-        
+
         console.print(f"[green]✅ Model saved to: {model_path}[/green]")
-        console.print(f"[green]✅ Features saved to: {feature_path}[/green]")
+        console.print(f"[green]✅ Feature columns saved to: {feature_columns_path}[/green]")
         console.print(f"[green]✅ Scaler saved to: {scaler_path}[/green]")
     
     def run_complete_pipeline(self, use_tuning: bool = True):

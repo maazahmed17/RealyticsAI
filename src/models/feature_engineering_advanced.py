@@ -40,7 +40,7 @@ class AdvancedFeatureEngineer:
         self.scalers = {}
         self.feature_names = []
         self.location_encoder = None
-        self.target_encoder = None
+        from models.column_definitions import COLUMNS, NUMERIC_COLUMNS, CATEGORICAL_COLUMNS, TEXT_COLUMNS, TARGET_COLUMN
         
     def create_basic_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create basic derived features from existing columns"""

@@ -167,8 +167,12 @@ body {
     display: none;
 }
 
+.sidebar-left .logo-container {
+    display: none;
+}
+
 .sidebar-left.collapsed .logo-container {
-    justify-content: center;
+    display: none;
 }
 
 .sidebar-left.collapsed .nav-item {

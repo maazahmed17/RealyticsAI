@@ -503,37 +503,38 @@ class RealyticsAIChatbot:
                 balcony_location_deviation = 0
                 balcony_location_norm_deviation = 0
             
-            # Create feature vector matching the 25 expected features
-            features = [
-                bhk,                                # 1. bhk
-                sqft,                               # 2. totalsqft
-                bath,                               # 3. bath
-                balcony,                            # 4. balcony
-                propertyageyears,                   # 5. propertyageyears
-                floornumber,                        # 6. floornumber
-                totalfloors,                        # 7. totalfloors
-                parking,                            # 8. parking
-                total_rooms,                        # 9. total_rooms
-                bath_bhk_ratio,                     # 10. bath_bhk_ratio
-                balcony_bhk_ratio,                  # 11. balcony_bhk_ratio
-                is_luxury,                          # 12. is_luxury
-                bhk_bath_product,                   # 13. bhk_bath_product
-                bhk_balcony_product,                # 14. bhk_balcony_product
-                location_frequency,                 # 15. location_frequency
-                location_cluster,                   # 16. location_cluster
-                is_popular_location,                # 17. is_popular_location
-                bath_bin_code,                      # 18. bath_bin_code
-                bhk_bin_code,                       # 19. bhk_bin_code
-                bath_location_deviation,            # 20. bath_location_deviation
-                bath_location_norm_deviation,       # 21. bath_location_norm_deviation
-                bhk_location_deviation,             # 22. bhk_location_deviation
-                bhk_location_norm_deviation,        # 23. bhk_location_norm_deviation
-                balcony_location_deviation,         # 24. balcony_location_deviation
-                balcony_location_norm_deviation     # 25. balcony_location_norm_deviation
-            ]
-            
-            # Convert to DataFrame
-            X = pd.DataFrame([features], columns=self.feature_columns)
+
+            # Build a dict of all possible engineered features
+            all_features = {
+                'BHK': bhk,
+                'TotalSqft': sqft,
+                'Bath': bath,
+                'Balcony': balcony,
+                'PropertyAgeYears': propertyageyears,
+                'FloorNumber': floornumber,
+                'TotalFloors': totalfloors,
+                'Parking': parking,
+                'total_rooms': total_rooms,
+                'bath_bhk_ratio': bath_bhk_ratio,
+                'balcony_bhk_ratio': balcony_bhk_ratio,
+                'is_luxury': is_luxury,
+                'bhk_bath_product': bhk_bath_product,
+                'bhk_balcony_product': bhk_balcony_product,
+                'location_frequency': location_frequency,
+                'location_cluster': location_cluster,
+                'is_popular_location': is_popular_location,
+                'bath_bin_code': bath_bin_code,
+                'bhk_bin_code': bhk_bin_code,
+                'bath_location_deviation': bath_location_deviation,
+                'bath_location_norm_deviation': bath_location_norm_deviation,
+                'bhk_location_deviation': bhk_location_deviation,
+                'bhk_location_norm_deviation': bhk_location_norm_deviation,
+                'balcony_location_deviation': balcony_location_deviation,
+                'balcony_location_norm_deviation': balcony_location_norm_deviation
+            }
+
+            # Only use the features the model expects, in the correct order
+            X = pd.DataFrame([[all_features.get(f, 0) for f in self.feature_columns]], columns=self.feature_columns)
             
             # Scale features
             if self.feature_scaler:

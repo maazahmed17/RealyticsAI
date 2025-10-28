@@ -4,8 +4,10 @@ RealyticsAI Chatbot Handler
 Natural language interface for property price predictions
 """
 
+
 import re
 import json
+import pandas as pd
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 from enum import Enum
@@ -481,22 +483,32 @@ Just ask me naturally, and I'll help you find the information you need!"""
         # Handle based on intent
         prediction = None
         if intent == Intent.PRICE_PREDICTION:
-            # Check if we have enough information
-            if entities.get("bathrooms") is not None and entities.get("balconies") is not None:
-                # Get prediction from price service
-                if self.price_predictor and self.price_predictor.is_trained:
-                    features = {
-                        "bath": entities["bathrooms"],
-                        "balcony": entities["balconies"]
-                    }
-                    prediction = self.price_predictor.predict_price(features)
-        
+            # Prepare full feature dict for the model
+            # Use defaults if missing
+            features = {
+                "location": entities.get("location", "Whitefield"),
+                "bhk": entities.get("bhk", 2),
+                "bath": entities.get("bathrooms", 2),
+                "balcony": entities.get("balconies", 1),
+                "total_sqft": 1200  # Default typical value
+            }
+            # If user specified BHK in text, use it
+            bhk_match = None
+            import re
+            if "bhk" not in entities or entities["bhk"] is None:
+                bhk_match = re.search(r'(\d+)\s*bhk', query.lower())
+                if bhk_match:
+                    features["bhk"] = int(bhk_match.group(1))
+            # Call the fixed price predictor
+            if self.price_predictor:
+                prediction = self.price_predictor.predict(features)
+
         # Generate response
         response = self.generate_response(intent, entities, prediction)
-        
+
         # Add to conversation history
         self.conversation_state.add_message("assistant", response)
-        
+
         return response
     
     def process_query_sync(self, query: str, session_id: Optional[str] = None) -> str:
