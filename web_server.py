@@ -12,6 +12,7 @@ import sys
 import os
 import logging
 from pathlib import Path
+import requests
 
 # Add the project root to Python path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -245,6 +246,71 @@ def get_sample_queries():
         'success': True,
         'sample_queries': queries
     })
+
+# ------------------------------------------------------------
+# Negotiation proxy endpoints -> forward to FastAPI (port 8000)
+# ------------------------------------------------------------
+
+@app.route('/api/negotiate/start', methods=['POST'])
+def negotiate_start_proxy():
+    """Proxy negotiation start to FastAPI backend."""
+    try:
+        resp = requests.post(
+            'http://localhost:8000/api/negotiate/start',
+            json=request.json,
+            headers={'X-User-Id': request.headers.get('X-User-Id', 'default-user')},
+            timeout=10,
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        logger.error(f"Negotiation start proxy error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/negotiate/respond', methods=['POST'])
+def negotiate_respond_proxy():
+    """Proxy negotiation respond to FastAPI backend."""
+    try:
+        resp = requests.post(
+            'http://localhost:8000/api/negotiate/respond',
+            json=request.json,
+            headers={'X-User-Id': request.headers.get('X-User-Id', 'default-user')},
+            timeout=10,
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        logger.error(f"Negotiation respond proxy error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/negotiate/history/<session_id>', methods=['GET'])
+def negotiate_history_proxy(session_id):
+    """Proxy negotiation history to FastAPI backend."""
+    try:
+        resp = requests.get(
+            f'http://localhost:8000/api/negotiate/history/{session_id}',
+            headers={'X-User-Id': request.headers.get('X-User-Id', 'default-user')},
+            timeout=10,
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        logger.error(f"Negotiation history proxy error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/negotiate/end/<session_id>', methods=['POST'])
+def negotiate_end_proxy(session_id):
+    """Proxy negotiation end to FastAPI backend."""
+    try:
+        resp = requests.post(
+            f'http://localhost:8000/api/negotiate/end/{session_id}',
+            headers={'X-User-Id': request.headers.get('X-User-Id', 'default-user')},
+            timeout=10,
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        logger.error(f"Negotiation end proxy error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/system/status', methods=['GET'])
 def system_status():

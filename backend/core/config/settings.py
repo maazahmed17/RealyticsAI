@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     # External APIs (for future integrations)
     openai_api_key: Optional[str] = None
     google_maps_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    model_name: str = "gemini-2.0-flash"
     
     # File Upload Settings
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
@@ -71,6 +73,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        protected_namespaces = ()
 
 
 @lru_cache()

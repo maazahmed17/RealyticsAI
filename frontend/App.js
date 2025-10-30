@@ -1,3 +1,7 @@
+// Global Negotiation State
+let currentNegotiationContext = null; // { propertyId, price?, details }
+let currentNegotiationSessionId = null; // session id from backend
+
 /**
  * RealyticsAI - Interactive Application Logic
  * Handles UI interactions, animations, and chat functionality
@@ -31,6 +35,12 @@ class RealyticsAI {
         this.welcomeContainer = document.getElementById('welcomeContainer');
         this.messageInput = document.getElementById('messageInput');
         this.sendBtn = document.getElementById('sendBtn');
+        
+        // Negotiation bar elements
+        this.negotiationBar = document.getElementById('negotiation-bar');
+        this.negotiatePropertyDetails = document.getElementById('negotiate-property-details');
+        this.startNegotiationBtn = document.getElementById('start-negotiation-btn');
+        this.closeNegotiationBarBtn = document.getElementById('close-negotiation-bar');
         
         // Features menu
         this.featuresBtn = document.getElementById('featuresBtn');
@@ -81,6 +91,18 @@ class RealyticsAI {
         
         // New chat button
         this.newChatBtn.addEventListener('click', () => this.startNewChat());
+
+        // Start negotiation button
+        if (this.startNegotiationBtn) {
+            this.startNegotiationBtn.addEventListener('click', () => this.startNegotiationFlow());
+        }
+        // Close negotiation bar
+        if (this.closeNegotiationBarBtn) {
+            this.closeNegotiationBarBtn.addEventListener('click', () => {
+                if (this.negotiationBar) this.negotiationBar.style.display = 'none';
+                currentNegotiationContext = null;
+            });
+        }
     }
 
     // Sidebar Management
@@ -228,12 +250,10 @@ class RealyticsAI {
         this.chatMessages.appendChild(messageDiv);
         this.scrollToBottom();
         
-        // Attach action button listeners if they exist
         if (actionsHtml) {
             this.attachActionButtonListeners(messageDiv);
         }
         
-        // Add to message history
         this.messageHistory.push({ content, sender, timestamp: new Date() });
     }
 
@@ -291,18 +311,15 @@ class RealyticsAI {
             
             // Show valuation card if it's a valuation response
             if (data.is_price_prediction && data.property_details) {
-                // Extract actual price from response text
                 const priceMatch = data.response.match(/₹([\d,.]+)\s*(?:lakhs?|crores?)/i);
                 let actualPrice = 185; // Default
                 if (priceMatch) {
                     const priceText = priceMatch[1].replace(/,/g, '');
                     actualPrice = parseFloat(priceText);
-                    // If it's in crores, convert to lakhs
                     if (data.response.toLowerCase().includes('crore')) {
                         actualPrice *= 100;
                     }
                 }
-                
                 this.showValuationWithData(data.property_details, actualPrice, data.response);
             }
             
@@ -310,10 +327,88 @@ class RealyticsAI {
             if (data.is_recommendation && data.recommendations && data.recommendations.length > 0) {
                 this.showRecommendationsView(data.recommendations, data.total_recommendations);
             }
+
+            // NEW: Detect property context for negotiation enablement
+            try {
+                let detectedPropertyId = null;
+                let detailsText = null;
+                
+                // Check for property_details in response (from price prediction)
+                if (data.property_details && (data.property_details.id || data.property_details.property_id)) {
+                    detectedPropertyId = data.property_details.id || data.property_details.property_id;
+                    const loc = data.property_details.location || 'Selected Property';
+                    const sqft = data.property_details.sqft || data.property_details.total_sqft || '';
+                    const bhk = data.property_details.bhk ? `${data.property_details.bhk} BHK` : '';
+                    
+                    // Extract predicted price from response text or actualPrice variable
+                    let predictedPrice = null;
+                    if (data.is_price_prediction) {
+                        const priceMatch = data.response.match(/₹([\d,.]+)\s*(?:lakhs?|l)/i);
+                        if (priceMatch) {
+                            predictedPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
+                        }
+                    }
+                    
+                    detailsText = `${loc}${sqft ? ` · ${sqft} sqft` : ''}${bhk ? ` · ${bhk}` : ''}${predictedPrice ? ` · ₹${predictedPrice.toFixed(1)} Lakhs` : ''}`;
+                    
+                    // Store context with predicted price as asking price
+                    currentNegotiationContext = {
+                        propertyId: detectedPropertyId,
+                        details: detailsText,
+                        askingPrice: predictedPrice,
+                        location: loc,
+                        bhk: bhk,
+                        sqft: sqft
+                    };
+                    
+                    console.log('Negotiation context set from prediction:', currentNegotiationContext);
+                }
+                // Check for property recommendations
+                else if (data.recommendations && data.recommendations.length > 0) {
+                    const firstProp = data.recommendations[0];
+                    detectedPropertyId = firstProp.id || firstProp.property_id || `prop-${Date.now()}`;
+                    const loc = firstProp.location || firstProp.area_type || 'Recommended Property';
+                    const sqft = firstProp.sqft || firstProp.total_sqft || '';
+                    const bhk = firstProp.bhk ? `${firstProp.bhk} BHK` : '';
+                    const price = firstProp.price || firstProp.estimated_price || firstProp.list_price || null;
+                    const askingPrice = price ? parseFloat(price) : null;
+                    detailsText = `${loc}${sqft ? ` · ${sqft} sqft` : ''}${bhk ? ` · ${bhk}` : ''}${askingPrice ? ` · ₹${askingPrice.toFixed(1)} Lakhs` : ''}`;
+                    
+                    // Store full context with asking price
+                    currentNegotiationContext = {
+                        propertyId: detectedPropertyId,
+                        details: detailsText,
+                        askingPrice: askingPrice,
+                        location: loc,
+                        bhk: bhk,
+                        sqft: sqft
+                    };
+                    
+                    console.log('Negotiation context set:', currentNegotiationContext);
+                }
+                // Check for property mention in response text
+                else if (typeof data.response === 'string' && data.response.toLowerCase().includes('property')) {
+                    const idMatch = data.response.match(/(pid-[\w-]+|prop-[\w-]+)/i);
+                    detectedPropertyId = idMatch ? idMatch[1] : `prop-${Date.now()}`;
+                    detailsText = 'Property mentioned in response';
+                }
+                
+                // Update negotiation bar display
+                if (currentNegotiationContext && currentNegotiationContext.propertyId) {
+                    if (this.negotiatePropertyDetails) {
+                        this.negotiatePropertyDetails.innerText = currentNegotiationContext.details;
+                    }
+                    if (this.negotiationBar) {
+                        this.negotiationBar.style.display = 'flex';
+                        console.log('Negotiation bar shown for property:', currentNegotiationContext);
+                    }
+                }
+            } catch (e) {
+                console.warn('Negotiation detection failed:', e);
+            }
             
         } catch (error) {
             console.error('Error getting AI response:', error);
-            // Fallback to local response generation
             await this.delay(1500);
             this.removeTypingIndicator();
             let response = this.generateSampleResponse(message);
@@ -365,33 +460,91 @@ class RealyticsAI {
         const streamingText = messageDiv.querySelector('.streaming-text');
         const words = content.split(' ');
         
-        // Stream words with animation
         for (let i = 0; i < words.length; i++) {
             streamingText.textContent += (i > 0 ? ' ' : '') + words[i];
             this.scrollToBottom();
-            await this.delay(30); // Adjust speed of streaming
+            await this.delay(30);
         }
         
-        // Remove streaming indicator and apply formatting
         streamingText.classList.remove('streaming-text');
         
-        // Apply formatting to the complete message
         const messageTextDiv = messageDiv.querySelector('.message-text');
         if (messageTextDiv) {
             messageTextDiv.innerHTML = this.formatMessage(content);
         }
         
-        // Attach action button listeners if they exist
         if (actionsHtml) {
             this.attachActionButtonListeners(messageDiv);
         }
         
-        // Add to message history
         this.messageHistory.push({ content, sender: 'assistant', timestamp: new Date() });
         
-        // Show appropriate sidebar content based on context
         if (content.toLowerCase().includes('whitefield') || content.toLowerCase().includes('koramangala')) {
             this.showValuationResults();
+        }
+    }
+
+    async startNegotiationFlow() {
+        try {
+            if (!currentNegotiationContext || !currentNegotiationContext.propertyId) {
+                alert('Please select a property first.');
+                return;
+            }
+            
+            // Get asking price from context
+            const askingPrice = currentNegotiationContext.askingPrice;
+            if (!askingPrice || askingPrice <= 0) {
+                alert('Property price information is not available. Please select a property with price details.');
+                return;
+            }
+            
+            const input = prompt(`Property asking price is ₹${askingPrice.toFixed(1)} Lakhs.\n\nWhat is your target price in Lakhs?`);
+            if (!input) return;
+            
+            const targetPrice = parseFloat(input);
+            if (isNaN(targetPrice) || targetPrice <= 0) {
+                alert('Please enter a valid number.');
+                return;
+            }
+
+            // Show loading in chat
+            this.showTypingIndicator();
+            
+            const resp = await fetch('/api/negotiate/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    property_id: currentNegotiationContext.propertyId,
+                    target_price: targetPrice,
+                    user_role: 'buyer',
+                    initial_message: '',
+                    asking_price: askingPrice
+                })
+            });
+            
+            this.removeTypingIndicator();
+            const data = await resp.json();
+            
+            if (resp.ok) {
+                currentNegotiationSessionId = data.session_id;
+                if (this.negotiationBar) {
+                    this.negotiationBar.style.display = 'none';
+                }
+                // Display the negotiation analysis
+                await this.addStreamingMessage(data.agent_opening || 'Negotiation analysis completed.');
+                
+                // Reset negotiation context - this is a one-time analysis
+                currentNegotiationSessionId = null;
+                currentNegotiationContext = null;
+                this.messageInput.placeholder = 'Ask about a property, or select a feature...';
+            } else {
+                throw new Error(data.detail || 'Failed to start negotiation');
+            }
+        } catch (e) {
+            console.error('Failed to start negotiation:', e);
+            this.removeTypingIndicator();
+            const msg = (e && e.message) ? e.message : 'Could not analyze negotiation at the moment.';
+            this.addMessage(msg, 'assistant');
         }
     }
 
@@ -431,7 +584,6 @@ class RealyticsAI {
         const welcomeContainer = document.getElementById('welcomeContainer');
         
         if (this.isFirstTimeUser) {
-            // First-time user welcome - enhanced branding
             welcomeContainer.innerHTML = `
                 <div class="welcome-first-time">
                     <div class="welcome-logo">
@@ -449,10 +601,8 @@ class RealyticsAI {
                     </div>
                 </div>
             `;
-            // Mark user as returning for next time
             localStorage.setItem('returningUser', 'true');
         } else {
-            // Returning user simple welcome
             welcomeContainer.innerHTML = `
                 <div class="welcome-simple">
                     <p class="welcome-simple-text">How can I help you today?</p>

@@ -1669,3 +1669,53 @@ kbd {
 .mb-2 { margin-bottom: var(--spacing-sm); }
 .mb-3 { margin-bottom: var(--spacing-md); }
 .mb-4 { margin-bottom: var(--spacing-lg); }
+
+/* Negotiation Bar */
+.negotiation-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    margin: 0 var(--spacing-xl);
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-left: 4px solid var(--accent-primary);
+    border-radius: 12px;
+}
+
+.negotiation-close-btn {
+    position: absolute;
+    right: 8px;
+    top: 6px;
+    width: 28px;
+    height: 28px;
+    line-height: 26px;
+    text-align: center;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.negotiation-close-btn:hover {
+    background: var(--bg-hover);
+}
+
+.negotiation-bar p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+#start-negotiation-btn {
+    padding: 8px 14px;
+    background: var(--accent-primary);
+    color: white;
+    border-radius: 8px;
+}
+
+#start-negotiation-btn:hover {
+    background: var(--accent-hover);
+}

@@ -13,8 +13,8 @@ from pathlib import Path
 import tempfile
 import os
 
-from services.price_prediction.enhanced_price_predictor import EnhancedPricePredictionService
-from core.config.settings import get_settings
+from ...services.price_prediction.enhanced_price_predictor import EnhancedPricePredictionService
+from ...core.config.settings import get_settings
 
 router = APIRouter()
 

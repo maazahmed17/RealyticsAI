@@ -10,14 +10,21 @@ from contextlib import asynccontextmanager
 import uvicorn
 from pathlib import Path
 
-# Import API routes
-from api.routes import price_prediction, chatbot, health
-# from api.routes import property_recommendation, negotiation_agent  # Coming soon
+# Import API routes (package-relative)
+from .api.routes import price_prediction, chatbot, health
+# Try optional routes that may not always be present
+try:
+    from .api.routes import property_recommendation
+except Exception:
+    property_recommendation = None
 
-# Import core components
-from core.config.settings import get_settings
-from core.database.connection import init_database
-from core.models.base import Base
+# Negotiation router (new module)
+from .negotiation import routes as negotiation_routes
+
+# Import core components (package-relative)
+from .core.config.settings import get_settings
+from .core.database.connection import init_database
+from .core.models.base import Base
 
 
 @asynccontextmanager
@@ -78,10 +85,18 @@ app.include_router(
 )
 
 # Future feature routes (placeholder)
+if property_recommendation is not None:
+    app.include_router(
+        property_recommendation.router,
+        prefix="/api/v1",
+        tags=["Property Recommendation"]
+    )
+
+# Negotiation routes mounted without extra prefix so paths remain /api/negotiate/*
 app.include_router(
-    property_recommendation.router,
-    prefix="/api/v1",
-    tags=["Property Recommendation"]
+    negotiation_routes.router,
+    prefix="",
+    tags=["Negotiation"]
 )
 
 # app.include_router(

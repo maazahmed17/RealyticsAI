@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 # Correctly import your RecommendationService
-from services.property_recommendation.recommender import RecommendationService
+from ...services.property_recommendation.recommender import RecommendationService
 
 router = APIRouter()
 

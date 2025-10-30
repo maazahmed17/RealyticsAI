@@ -73,23 +73,58 @@ class RealyticsAIChatbot:
     def classify_intent(self, message: str) -> IntentType:
         """Classify user intent from message"""
         
+        message_lower = message.lower()
+        
+        # Rule-based detection for high-confidence cases
+        # Check for negotiation keywords FIRST (highest priority)
+        negotiation_keywords = ['negotiate', 'negotiation', 'bargain', 'deal', 'offer', 'counter', 'budget']
+        asking_price_indicators = ['asking', 'listed at', 'priced at', 'listed for']
+        
+        has_negotiation_keyword = any(keyword in message_lower for keyword in negotiation_keywords)
+        has_asking_price = any(indicator in message_lower for indicator in asking_price_indicators)
+        
+        # If both negotiation keyword AND asking price mentioned → definitely negotiation
+        if has_negotiation_keyword and has_asking_price:
+            return IntentType.NEGOTIATION_HELP
+        
+        # If message has "budget" + "asking" → negotiation
+        if 'budget' in message_lower and has_asking_price:
+            return IntentType.NEGOTIATION_HELP
+        
+        # Check for other clear patterns
+        if any(word in message_lower for word in ['hello', 'hi', 'hey', 'greetings']):
+            return IntentType.GREETING
+        
+        if any(word in message_lower for word in ['help', 'how to', 'guide', 'tutorial']):
+            return IntentType.HELP
+        
+        if any(word in message_lower for word in ['bye', 'goodbye', 'exit', 'quit']):
+            return IntentType.EXIT
+        
+        # Use Gemini for ambiguous cases
         prompt = f"""
         Classify the following user message into one of these categories:
-        - price_prediction: User wants to know property price or get price estimate
-        - property_search: User is looking for properties or recommendations
+        - price_prediction: User wants to ESTIMATE/PREDICT property price (e.g., "what's the price of a 2BHK?")
+        - property_search: User is LOOKING FOR or wants RECOMMENDATIONS for properties
         - market_analysis: User wants market insights, trends, or analysis
-        - negotiation_help: User needs help with price negotiation
-        - greeting: User is greeting or starting conversation
-        - help: User is asking for help or capabilities
-        - exit: User wants to end conversation
+        - negotiation_help: User needs help with NEGOTIATING a deal, has target/budget vs asking price
         - general_query: General real estate question
+        
+        IMPORTANT: 
+        - If message mentions BOTH an asking price AND a budget/target/offer → negotiation_help
+        - If message says "help me negotiate" → negotiation_help
+        - If message only asks for price estimate → price_prediction
         
         Message: {message}
         
         Return ONLY the category name, nothing else.
         """
         
-        response = self.gemini_chatbot.gemini_service.generate_response(prompt).strip().lower()
+        try:
+            response = self.gemini_chatbot.gemini_service.generate_response(prompt).strip().lower()
+        except Exception as e:
+            logger.error(f"Intent classification error: {e}")
+            return IntentType.GENERAL_QUERY
         
         # Map response to IntentType
         intent_map = {
@@ -273,23 +308,126 @@ This prediction is based on {result['features_used']} features and uses our late
     def _handle_negotiation(self, message: str) -> str:
         """Handle negotiation assistance queries"""
         
-        response = """I can help you with negotiation strategies!
+        try:
+            # Extract negotiation details from message
+            import re
+            
+            # Look for asking price pattern
+            asking_match = re.search(r'asking\s+(?:price\s+)?(?:is\s+)?(?:₹)?([\d.]+)\s*(?:lakhs?|l)', message, re.IGNORECASE)
+            # Look for target price pattern
+            target_match = re.search(r'(?:target|budget|offer|pay)\s+(?:price\s+)?(?:is\s+)?(?:₹)?([\d.]+)\s*(?:lakhs?|l)', message, re.IGNORECASE)
+            
+            # Extract location/property details
+            location_patterns = [
+                r'in\s+([A-Za-z\s]+?)(?:\s+of|,|\.|$)',
+                r'at\s+([A-Za-z\s]+?)(?:\s+of|,|\.|$)',
+                r'property\s+in\s+([A-Za-z\s]+?)(?:\s+of|,|\.|$)'
+            ]
+            location = None
+            for pattern in location_patterns:
+                loc_match = re.search(pattern, message, re.IGNORECASE)
+                if loc_match:
+                    location = loc_match.group(1).strip()
+                    break
+            
+            # Extract BHK
+            bhk_match = re.search(r'(\d+)\s*bhk', message, re.IGNORECASE)
+            bhk = int(bhk_match.group(1)) if bhk_match else None
+            
+            asking_price = float(asking_match.group(1)) if asking_match else None
+            target_price = float(target_match.group(1)) if target_match else None
+            
+            # If we have both prices, perform negotiation analysis
+            if asking_price and target_price:
+                import httpx
+                import asyncio
+                
+                property_id = f"prop-{location or 'unknown'}-{bhk or 'N'}bhk".replace(' ', '-')
+                
+                # Call negotiation API
+                try:
+                    async def call_negotiate_api():
+                        async with httpx.AsyncClient(timeout=10.0) as client:
+                            resp = await client.post(
+                                "http://localhost:8000/api/negotiate/start",
+                                json={
+                                    "property_id": property_id,
+                                    "target_price": target_price,
+                                    "user_role": "buyer",
+                                    "asking_price": asking_price,
+                                    "initial_message": ""
+                                }
+                            )
+                            if resp.status_code == 200:
+                                return resp.json()
+                            return None
+                    
+                    # Run async call
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    result = loop.run_until_complete(call_negotiate_api())
+                    loop.close()
+                    
+                    if result:
+                        return result.get('agent_opening', 'Negotiation analysis completed.')
+                except Exception as e:
+                    logger.error(f"Negotiation API call failed: {e}")
+            
+            # If we have asking price but no target, ask for target
+            if asking_price and not target_price:
+                return f"""I can help you analyze this negotiation!
 
-The automated negotiation agent is under development, but I can provide valuable insights:
+🏠 **Property Details:**
+{f'- Location: {location}' if location else ''}
+{f'- Type: {bhk} BHK' if bhk else ''}
+- Asking Price: ₹{asking_price} Lakhs
 
-**Negotiation Tips for Bengaluru Real Estate:**
+💡 To provide negotiation advice, please tell me:
+**What is your target price?**
 
-1. **Research Market Prices** - I can help you understand the fair price for any property
-2. **Identify Negotiation Points** - Age of property, amenities, location advantages
-3. **Timing Matters** - End of financial year often sees better deals
-4. **Standard Negotiation Range** - 5-10% is typical in Bengaluru market
+For example: "My budget is 85 lakhs" or "I want to offer 80 lakhs"
 
-Would you like me to:
-- Analyze a specific property's price to help with negotiation?
-- Provide market comparisons for bargaining power?
-- Suggest negotiation strategies based on current market conditions?
+I'll analyze if your target is compatible with the asking price and provide professional advice on whether to proceed with the offer."""
+            
+            # If we have target but no asking, ask for asking
+            if target_price and not asking_price:
+                return f"""I can help you with this negotiation!
 
-What specific help do you need with negotiation?"""
+💰 Your Budget: ₹{target_price} Lakhs
+{f'🏠 Location: {location}' if location else ''}
+{f'🏠 Type: {bhk} BHK' if bhk else ''}
+
+💡 To provide negotiation advice, please tell me:
+**What is the property's asking price?**
+
+For example: "The property is asking 95 lakhs" or "Listed at 100 lakhs"
+
+I'll analyze if your budget is compatible and provide advice on negotiation strategy."""
+            
+            # Generic negotiation help
+            return """I can help you analyze property negotiations! 💼
+
+**How to use:**
+Tell me about the property and prices, for example:
+- "Help me negotiate for a property in RT Nagar of 3BHK which is asking 100 lakhs"
+- "I want to buy a 2BHK in Whitefield for 85 lakhs but it's listed at 95 lakhs"
+- "Property is asking 120 lakhs, my budget is 110 lakhs"
+
+**What I'll provide:**
+✅ Compatibility assessment (Is your target reasonable?)
+✅ Market perspective (Good negotiation starting point?)
+✅ Clear recommendation (Should you proceed?)
+✅ Next steps and strategies
+
+Just describe your situation and I'll analyze it for you!"""
+            
+        except Exception as e:
+            logger.error(f"Negotiation handling error: {e}")
+            return """I can help with negotiation! Please provide:
+1. Property asking price (e.g., "asking 100 lakhs")
+2. Your target price (e.g., "my budget is 90 lakhs")
+
+I'll analyze the compatibility and provide professional advice."""
         
         return response
     

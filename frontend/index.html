@@ -95,6 +95,13 @@
             <!-- Chat messages will be dynamically added here -->
         </div>
         
+        <!-- Negotiation Bar (hidden until a property is selected) -->
+        <div id="negotiation-bar" class="negotiation-bar" style="display: none; position: relative;">
+            <button id="close-negotiation-bar" aria-label="Close negotiation bar" title="Close" class="negotiation-close-btn">×</button>
+            <p>Negotiating for: <strong id="negotiate-property-details"></strong></p>
+            <button id="start-negotiation-btn">Start Negotiation</button>
+        </div>
+        
         <!-- Input Container -->
         <div class="input-container">
             <div class="input-wrapper">

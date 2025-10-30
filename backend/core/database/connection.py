@@ -6,7 +6,8 @@ import asyncio
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from core.config.settings import get_database_url
+from ..config.settings import get_database_url
+from ..models.base import Base
 
 # Database engines
 sync_engine = None
@@ -36,6 +37,12 @@ async def init_database():
     async_session = sessionmaker(
         async_engine, class_=AsyncSession, expire_on_commit=False
     )
+    
+    # Create tables if they do not exist (dev convenience; migrations can manage in prod)
+    try:
+        Base.metadata.create_all(sync_engine)
+    except Exception as e:
+        print(f"⚠️  Failed to auto-create tables: {e}")
     
     print(f"✅ Database initialized: {database_url}")
 

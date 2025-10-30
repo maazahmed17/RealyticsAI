@@ -41,24 +41,53 @@ def main():
         elif choice == "2":
             print("\n🌐 Starting web server...")
             try:
-                from web_server import app, initialize_system
+                import multiprocessing
+                import uvicorn
                 
-                # Initialize system
-                if not initialize_system():
-                    print("❌ Failed to initialize system. Exiting.")
-                    sys.exit(1)
+                def start_fastapi():
+                    """Start FastAPI backend on port 8000"""
+                    uvicorn.run(
+                        "backend.main:app",
+                        host="0.0.0.0",
+                        port=8000,
+                        log_level="info"
+                    )
                 
+                def start_flask():
+                    """Start Flask web server on port 5000"""
+                    from web_server import app, initialize_system
+                    
+                    # Initialize system
+                    if not initialize_system():
+                        print("❌ Failed to initialize Flask system. Exiting.")
+                        return
+                    
+                    app.run(host='0.0.0.0', port=5000, debug=False)
+                
+                # Start FastAPI in background process
+                print("🚀 Starting FastAPI backend (port 8000)...")
+                fastapi_process = multiprocessing.Process(target=start_fastapi, daemon=True)
+                fastapi_process.start()
+                
+                # Give FastAPI time to start
+                import time
+                time.sleep(2)
+                
+                print("🌐 Starting Flask web server (port 5000)...")
                 print("\n📱 Web interface will be available at:")
                 print("   http://localhost:5000")
-                print("\n⏹️  Press Ctrl+C to stop the server")
+                print("   FastAPI backend: http://localhost:8000")
+                print("\n⏹️  Press Ctrl+C to stop the servers")
                 
-                # Run the web server
-                app.run(host='0.0.0.0', port=5000, debug=False)
+                # Run Flask in main thread
+                start_flask()
                 
             except KeyboardInterrupt:
-                print("\n✨ Web server stopped.")
+                print("\n✨ Servers stopped.")
             except Exception as e:
                 print(f"\n❌ Error: {e}")
+                import traceback
+                traceback.print_exc()
             break
             
         elif choice == "3":
