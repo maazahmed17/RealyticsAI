@@ -36,11 +36,11 @@ mlflow.db
 
 # Data files
 
-data/processed/*
-data/models/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/models/.gitkeep
+# data/processed/*
+# data/models/*
+# !data/raw/.gitkeep
+# !data/processed/.gitkeep
+# !data/models/.gitkeep
 
 # IDE
 .vscode/

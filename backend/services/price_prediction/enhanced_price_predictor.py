@@ -11,11 +11,21 @@ from typing import Dict, List, Optional, Any, Tuple
 import pickle
 import joblib
 import os
+import sys
 from pathlib import Path
 import logging
 from datetime import datetime
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder, StandardScaler, RobustScaler
 import xgboost as xgb
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
+try:
+    from models.feature_engineering_advanced import AdvancedFeatureEngineer
+    ADVANCED_FEATURES_AVAILABLE = True
+except ImportError:
+    logger.warning("AdvancedFeatureEngineer not available")
+    ADVANCED_FEATURES_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +86,12 @@ class EnhancedPricePredictionService:
     def __init__(self):
         self.xgb_model = None
         self.location_encoder = LocationEncoder()
-        self.scaler = StandardScaler()
+        self.scaler = RobustScaler()
         self.feature_columns = None
         self.data = None
-        self.model_path = Path("/home/maaz/RealyticsAI_Dev/data/models")
-        self.data_path = Path("/home/maaz/RealyticsAI_Dev/data/bengaluru_house_prices.csv")
+        self.feature_engineer = AdvancedFeatureEngineer() if ADVANCED_FEATURES_AVAILABLE else None
+        self.model_path = Path("/home/maaz/RealyticsAI/data/models")
+        self.data_path = Path("/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv")
         
         # Initialize service
         self._initialize_service()
@@ -120,7 +131,13 @@ class EnhancedPricePredictionService:
     
     def _clean_data(self):
         """Clean and prepare the dataset"""
+        # Normalize column names to lowercase
+        self.data.columns = self.data.columns.str.lower()
+        
         # Handle total_sqft column
+        if 'totalsqft' in self.data.columns:
+            self.data.rename(columns={'totalsqft': 'total_sqft'}, inplace=True)
+        
         if 'total_sqft' in self.data.columns:
             def convert_sqft(x):
                 try:
@@ -340,50 +357,63 @@ class EnhancedPricePredictionService:
             bath = features.get('bath', features.get('bathrooms', 2))
             balcony = features.get('balcony', features.get('balconies', 1))
             sqft = features.get('total_sqft', features.get('area', features.get('sqft', None)))
+            location = features.get('location', 'Bangalore')
             
             # Handle missing sqft - estimate based on BHK
             if not sqft:
                 sqft_estimates = {1: 650, 2: 1100, 3: 1650, 4: 2200, 5: 2800}
                 sqft = sqft_estimates.get(bhk, 1650)
             
-            # Prepare feature vector using the exact format expected by the model
-            if self.xgb_model and self.feature_columns:
-                # Load location encoding data
-                location = features.get('location', 'Bangalore')
-                if self.data is not None:
-                    # Handle different column names in the dataset
-                    location_col = 'Location' if 'Location' in self.data.columns else 'location'
-                    price_col = 'Price' if 'Price' in self.data.columns else 'price'
-                    
-                    location_counts = self.data[location_col].value_counts()
-                    location_prices = self.data.groupby(location_col)[price_col].mean()
-                    global_mean = self.data[price_col].mean()
-                    
-                    loc_freq = location_counts.get(location, 10)
-                    loc_price = location_prices.get(location, global_mean)
-                else:
-                    loc_freq = 10
-                    loc_price = 200
+            # Prepare feature vector using proper feature engineering
+            if self.xgb_model and self.feature_columns and self.feature_engineer:
+                # Create a single-row DataFrame with the input
+                input_df = pd.DataFrame([{
+                    'location': location,
+                    'bhk': bhk,
+                    'total_sqft': sqft,
+                    'bath': bath,
+                    'balcony': balcony,
+                    'propertyageyears': features.get('property_age', 5),
+                    'floornumber': features.get('floor_number', 2),
+                    'totalfloors': features.get('total_floors', 4),
+                    'parking': features.get('parking', 1)
+                }])
                 
-                # Map to the expected column names (based on new training format)
-                feature_dict = {
-                    'BHK': bhk,
-                    'TotalSqft': sqft,
-                    'Bath': bath,
-                    'Balcony': balcony,
-                    'PropertyAgeYears': features.get('property_age', 5),
-                    'FloorNumber': features.get('floor_number', 2),
-                    'TotalFloors': features.get('total_floors', 4),
-                    'Parking': features.get('parking', 1),
-                    'LocationFrequency': loc_freq,
-                    'LocationPriceEncoding': loc_price,
-                    'SqftPerBHK': sqft / bhk,
-                    'BathPerBHK': bath / bhk,
-                    'TotalRooms': bhk + bath
-                }
-                
-                # Create DataFrame with correct columns
-                X = pd.DataFrame([feature_dict])[self.feature_columns]
+                # Apply feature engineering (same as training)
+                try:
+                    input_transformed = self.feature_engineer.transform(
+                        input_df,
+                        use_polynomial=False,
+                        use_interactions=True,
+                        use_binning=True,
+                        use_statistical=True
+                    )
+                    
+                    # Select numeric features
+                    numeric_features = input_transformed.select_dtypes(include=[np.number])
+                    
+                    # Align with training features
+                    X = pd.DataFrame()
+                    for col in self.feature_columns:
+                        if col in numeric_features.columns:
+                            X[col] = numeric_features[col]
+                        else:
+                            X[col] = 0  # Fill missing features with 0
+                    
+                except Exception as e:
+                    logger.warning(f"Feature engineering failed, using simple features: {e}")
+                    # Fallback to simple features
+                    feature_dict = {
+                        'bhk': bhk,
+                        'totalsqft': sqft,
+                        'bath': bath,
+                        'balcony': balcony,
+                    }
+                    X = pd.DataFrame([feature_dict])
+                    # Align with expected columns
+                    for col in self.feature_columns:
+                        if col not in X.columns:
+                            X[col] = 0
                 
                 # Scale features
                 X_scaled = self.scaler.transform(X)

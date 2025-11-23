@@ -29,7 +29,7 @@ class FixedPricePredictionService:
         self.scaler = None
         self.feature_columns = None
         self.feature_engineer = AdvancedFeatureEngineer()
-        self.model_dir = Path("/home/maaz/RealyticsAI_Dev/data/models")
+        self.model_dir = Path("/home/maaz/RealyticsAI/data/models")
         
         # Load the fixed model
         self._load_fixed_model()
@@ -100,7 +100,7 @@ class FixedPricePredictionService:
                 sqft = sqft_estimates.get(bhk, 1650)
             
             # Load reference data for location encoding
-            data_path = Path("/home/maaz/RealyticsAI_Dev/data/bengaluru_house_prices.csv")
+            data_path = Path("/home/maaz/RealyticsAI/data/bengaluru_house_prices.csv")
             if data_path.exists():
                 ref_data = pd.read_csv(data_path)
                 # Map location to frequency and price encoding

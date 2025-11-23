@@ -1,0 +1,16 @@
+{
+  "model_name": "xgboost_fixed_20251030_182959.pkl",
+  "model_type": "XGBoost",
+  "timestamp": "20251030_182959",
+  "train_r2": 0.9979376816204568,
+  "test_r2": 0.9976464661521316,
+  "train_rmse": 4.245067375773377,
+  "test_rmse": 4.496343735179637,
+  "train_mae": 3.66013820673113,
+  "test_mae": 3.7895952734284353,
+  "train_mape": 2.2516926436566385,
+  "test_mape": 2.30104162283256,
+  "n_features": 13,
+  "n_train_samples": 115269,
+  "n_test_samples": 28818
+}
